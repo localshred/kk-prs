@@ -31,6 +31,7 @@ func Execute() int {
 	}
 	root.Flags().BoolVarP(&reviews, "reviews", "r", false, "Show PRs requesting your review")
 	root.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed check status")
+	root.AddCommand(newWatchCmd())
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "kk-prs:", err)
 		return 1
