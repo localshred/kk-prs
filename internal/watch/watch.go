@@ -1,5 +1,7 @@
 package watch
 
+import "os"
+
 type Fetcher interface {
 	Fetch(url string) (PRView, error)
 }
@@ -31,7 +33,7 @@ func (w Watcher) Tick() error {
 		key := entry.Ref().Key()
 		view, err := w.Fetch.Fetch(entry.URL)
 		if err != nil {
-			kept = append(kept, entry) // keep, retry next tick
+			kept = append(kept, entry)
 			continue
 		}
 		snap := ToSnapshot(view)
@@ -81,6 +83,8 @@ func (w Watcher) Add(ref Ref) (string, error) {
 	if err := w.Store.SaveWatchlist(wl); err != nil {
 		return "", err
 	}
+	home, _ := os.UserHomeDir()
+	_ = EnsureAgent(home)
 	return "now watching " + key + " — " + view.Title, nil
 }
 

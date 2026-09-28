@@ -60,6 +60,9 @@ func (c Client) Checks(repo string, number int) []Check {
 // ReviewRequests returns PRs requesting review from the current user.
 func (c Client) ReviewRequests() ([]PR, error) { return c.search("--review-requested=@me") }
 
+// Runner returns the underlying runner for the client.
+func (c Client) Runner() run.Runner { return c.Run }
+
 // User returns the current user's login.
 func (c Client) User() (string, error) {
 	res, err := c.Run.Run("gh", "api", "user", "--jq", ".login")

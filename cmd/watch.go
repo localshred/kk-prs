@@ -3,7 +3,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/localshred/kk-prs/internal/gh"
@@ -18,8 +17,8 @@ func newWatcher() watch.Watcher {
 	c := gh.Client{Run: run.Default}
 	return watch.Watcher{
 		Store:  watch.NewStore(),
-		Fetch:  watch.NewGHFetcher(c), // Task C8
-		Notify: watch.NewBeeepNotifier(), // Task C8
+		Fetch:  watch.NewGHFetcher(c),
+		Notify: watch.NewBeeepNotifier(),
 		Now:    nowISO,
 	}
 }
@@ -85,5 +84,3 @@ func listWatched(w watch.Watcher, cmd *cobra.Command) error {
 	}
 	return nil
 }
-
-var _ = os.Stdout
