@@ -9,48 +9,12 @@ import (
 	"strconv"
 )
 
-type Ref struct {
-	Owner  string
-	Repo   string
-	Number int
-	URL    string
-}
-
 var (
 	reShort = regexp.MustCompile(`^([^/\s]+)/([^/\s#]+)#(\d+)$`)
 	reURL   = regexp.MustCompile(`github\.com[:/]([^/\s]+)/([^/\s]+)/pull/(\d+)`)
 )
 
-func ParseRef(s string) (Ref, bool) {
-	if m := reURL.FindStringSubmatch(s); m != nil {
-		n, _ := strconv.Atoi(m[3])
-		return Ref{Owner: m[1], Repo: m[2], Number: n,
-			URL: fmt.Sprintf("https://github.com/%s/%s/pull/%s", m[1], m[2], m[3])}, true
-	}
-	if m := reShort.FindStringSubmatch(s); m != nil {
-		n, _ := strconv.Atoi(m[3])
-		return Ref{Owner: m[1], Repo: m[2], Number: n,
-			URL: fmt.Sprintf("https://github.com/%s/%s/pull/%s", m[1], m[2], m[3])}, true
-	}
-	return Ref{}, false
-}
-
-func (r Ref) Key() string { return fmt.Sprintf("%s/%s#%d", r.Owner, r.Repo, r.Number) }
-
-type RollupEntry struct {
-	State      string `json:"state"`      // StatusContext
-	Status     string `json:"status"`     // CheckRun (e.g. COMPLETED)
-	Conclusion string `json:"conclusion"` // CheckRun conclusion
-}
-
-type comment struct {
-	Body      string `json:"body"`
-	CreatedAt string `json:"createdAt"`
-	Author    struct {
-		Login string `json:"login"`
-	} `json:"author"`
-}
-
+// PRView represents the gh pr view --json output structure.
 type PRView struct {
 	Number            int           `json:"number"`
 	Title             string        `json:"title"`
@@ -63,6 +27,22 @@ type PRView struct {
 	StatusCheckRollup []RollupEntry `json:"statusCheckRollup"`
 }
 
+// Ref identifies a GitHub PR by owner, repo, and number.
+type Ref struct {
+	Owner  string
+	Repo   string
+	Number int
+	URL    string
+}
+
+// RollupEntry represents a single status check entry from gh pr view.
+type RollupEntry struct {
+	State      string `json:"state"`      // StatusContext
+	Status     string `json:"status"`     // CheckRun (e.g. COMPLETED)
+	Conclusion string `json:"conclusion"` // CheckRun conclusion
+}
+
+// Snapshot holds the diffable state of a PR.
 type Snapshot struct {
 	Checks         string `json:"checks"`
 	Comments       int    `json:"comments"`
@@ -75,30 +55,25 @@ type Snapshot struct {
 	CheckedAt      string `json:"checked-at"`
 }
 
-var contextKind = map[string]string{
-	"ERROR": "fail", "EXPECTED": "ok", "FAILURE": "fail", "PENDING": "pending", "SUCCESS": "ok",
-}
-var conclusionKind = map[string]string{
-	"ACTION_REQUIRED": "fail", "CANCELLED": "fail", "FAILURE": "fail", "NEUTRAL": "ok",
-	"SKIPPED": "ok", "STALE": "fail", "STARTUP_FAILURE": "fail", "SUCCESS": "ok", "TIMED_OUT": "fail",
-}
-
-func checkKind(e RollupEntry) string {
-	if e.State != "" {
-		if k, ok := contextKind[e.State]; ok {
-			return k
-		}
-		return "pending"
-	}
-	if e.Status == "COMPLETED" {
-		if k, ok := conclusionKind[e.Conclusion]; ok {
-			return k
-		}
-		return "fail"
-	}
-	return "pending"
+type comment struct {
+	Body      string `json:"body"`
+	CreatedAt string `json:"createdAt"`
+	Author    struct {
+		Login string `json:"login"`
+	} `json:"author"`
 }
 
+var (
+	contextKind = map[string]string{
+		"ERROR": "fail", "EXPECTED": "ok", "FAILURE": "fail", "PENDING": "pending", "SUCCESS": "ok",
+	}
+	conclusionKind = map[string]string{
+		"ACTION_REQUIRED": "fail", "CANCELLED": "fail", "FAILURE": "fail", "NEUTRAL": "ok",
+		"SKIPPED": "ok", "STALE": "fail", "STARTUP_FAILURE": "fail", "SUCCESS": "ok", "TIMED_OUT": "fail",
+	}
+)
+
+// ChecksSummary returns "passing", "failing", "running", or "none" based on rollup state.
 func ChecksSummary(rollup []RollupEntry) string {
 	if len(rollup) == 0 {
 		return "none"
@@ -120,26 +95,6 @@ func ChecksSummary(rollup []RollupEntry) string {
 	default:
 		return "passing"
 	}
-}
-
-func ToSnapshot(v PRView) Snapshot {
-	return Snapshot{
-		Checks:         ChecksSummary(v.StatusCheckRollup),
-		Comments:       len(v.Comments),
-		Mergeable:      v.Mergeable,
-		ReviewDecision: v.ReviewDecision,
-		Reviews:        len(v.Reviews),
-		State:          v.State,
-		Title:          v.Title,
-		URL:            v.URL,
-	}
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }
 
 // ComputeChanges returns notification lines for notable diffs, mirroring the
@@ -186,6 +141,7 @@ func ComputeChanges(old, new Snapshot) []string {
 	return out
 }
 
+// FieldTransitions returns detailed X → Y transition lines for all changed fields.
 func FieldTransitions(old, new Snapshot) []string {
 	var out []string
 	if old.Checks != new.Checks {
@@ -203,6 +159,60 @@ func FieldTransitions(old, new Snapshot) []string {
 	return out
 }
 
+// Key returns the canonical "owner/repo#number" string for this ref.
+func (r Ref) Key() string { return fmt.Sprintf("%s/%s#%d", r.Owner, r.Repo, r.Number) }
+
+// ParseRef accepts a github PR URL or owner/repo#number format.
+func ParseRef(s string) (Ref, bool) {
+	if m := reURL.FindStringSubmatch(s); m != nil {
+		n, err := strconv.Atoi(m[3])
+		if err != nil {
+			return Ref{}, false
+		}
+		return Ref{Owner: m[1], Repo: m[2], Number: n,
+			URL: fmt.Sprintf("https://github.com/%s/%s/pull/%s", m[1], m[2], m[3])}, true
+	}
+	if m := reShort.FindStringSubmatch(s); m != nil {
+		n, err := strconv.Atoi(m[3])
+		if err != nil {
+			return Ref{}, false
+		}
+		return Ref{Owner: m[1], Repo: m[2], Number: n,
+			URL: fmt.Sprintf("https://github.com/%s/%s/pull/%s", m[1], m[2], m[3])}, true
+	}
+	return Ref{}, false
+}
+
+// ToSnapshot converts a PRView into a diffable Snapshot.
+func ToSnapshot(v PRView) Snapshot {
+	return Snapshot{
+		Checks:         ChecksSummary(v.StatusCheckRollup),
+		Comments:       len(v.Comments),
+		Mergeable:      v.Mergeable,
+		ReviewDecision: v.ReviewDecision,
+		Reviews:        len(v.Reviews),
+		State:          v.State,
+		Title:          v.Title,
+		URL:            v.URL,
+	}
+}
+
+func checkKind(e RollupEntry) string {
+	if e.State != "" {
+		if k, ok := contextKind[e.State]; ok {
+			return k
+		}
+		return "pending"
+	}
+	if e.Status == "COMPLETED" {
+		if k, ok := conclusionKind[e.Conclusion]; ok {
+			return k
+		}
+		return "fail"
+	}
+	return "pending"
+}
+
 func labelReview(d string) string {
 	switch d {
 	case "":
@@ -216,4 +226,11 @@ func labelReview(d string) string {
 	default:
 		return d
 	}
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }

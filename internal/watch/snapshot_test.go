@@ -18,6 +18,9 @@ func TestParseRefFormats(t *testing.T) {
 	if _, ok := ParseRef("garbage"); ok {
 		t.Fatal("garbage should not parse")
 	}
+	if _, ok := ParseRef("owner/repo#99999999999999999999"); ok {
+		t.Fatal("overflowing number should not parse")
+	}
 }
 
 func TestChecksSummary(t *testing.T) {
