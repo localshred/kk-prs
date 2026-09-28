@@ -1,0 +1,18 @@
+version: 2
+project_name: kk-prs
+builds:
+  - main: .
+    binary: kk-prs
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags: [-s -w]
+archives:
+  - name_template: "kk-prs_{{ title .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+checksum:
+  name_template: checksums.txt
+release:
+  github:
+    owner: localshred
+    name: kk-prs
