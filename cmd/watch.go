@@ -11,16 +11,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func nowISO() string { return time.Now().UTC().Format(time.RFC3339) }
-
-func newWatcher() watch.Watcher {
-	c := gh.Client{Run: run.Default}
-	return watch.Watcher{
-		Store:  watch.NewStore(),
-		Fetch:  watch.NewGHFetcher(c),
-		Notify: watch.NewBeeepNotifier(),
-		Now:    nowISO,
+func listWatched(w watch.Watcher, cmd *cobra.Command) error {
+	wl := w.Store.ReadWatchlist()
+	if len(wl) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "📭 Not watching any PRs. Add one with: kk prs watch <pr-url>")
+		return nil
 	}
+	state := w.Store.ReadState()
+	for _, e := range wl {
+		snap := state[e.Ref().Key()]
+		fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s\n", e.Ref().Key(), snap.Checks, snap.Title)
+	}
+	return nil
 }
 
 func newWatchCmd() *cobra.Command {
@@ -71,16 +73,14 @@ func newWatchCmd() *cobra.Command {
 	return c
 }
 
-func listWatched(w watch.Watcher, cmd *cobra.Command) error {
-	wl := w.Store.ReadWatchlist()
-	if len(wl) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "📭 Not watching any PRs. Add one with: kk prs watch <pr-url>")
-		return nil
+func newWatcher() watch.Watcher {
+	c := gh.Client{Run: run.Default}
+	return watch.Watcher{
+		Store:  watch.NewStore(),
+		Fetch:  watch.NewGHFetcher(c),
+		Notify: watch.NewBeeepNotifier(),
+		Now:    nowISO,
 	}
-	state := w.Store.ReadState()
-	for _, e := range wl {
-		snap := state[e.Ref().Key()]
-		fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s\n", e.Ref().Key(), snap.Checks, snap.Title)
-	}
-	return nil
 }
+
+func nowISO() string { return time.Now().UTC().Format(time.RFC3339) }

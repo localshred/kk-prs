@@ -17,7 +17,60 @@ type Watcher struct {
 	Now    func() string
 }
 
-func isClosed(state string) bool { return state == "MERGED" || state == "CLOSED" }
+// Add seeds a PR's snapshot without notifying. Returns a status message.
+func (w Watcher) Add(ref Ref) (string, error) {
+	wl := w.Store.ReadWatchlist()
+	key := ref.Key()
+	for _, e := range wl {
+		if e.Ref().Key() == key {
+			return "already watching " + key, nil
+		}
+	}
+	view, err := w.Fetch.Fetch(ref.URL)
+	if err != nil {
+		return "", err
+	}
+	if isClosed(view.State) {
+		return key + " is already closed — not adding", nil
+	}
+	snap := ToSnapshot(view)
+	snap.CheckedAt = w.Now()
+	state := w.Store.ReadState()
+	state[key] = snap
+	if err := w.Store.SaveState(state); err != nil {
+		return "", err
+	}
+	wl = append(wl, WatchEntry{Owner: ref.Owner, Repo: ref.Repo, Number: ref.Number, URL: ref.URL, AddedAt: w.Now()})
+	if err := w.Store.SaveWatchlist(wl); err != nil {
+		return "", err
+	}
+	home, _ := os.UserHomeDir()
+	_ = EnsureAgent(home)
+	return "now watching " + key + " — " + view.Title, nil
+}
+
+// Remove drops a PR from the watchlist. Returns false when the PR was not
+// being watched. Persistence is best-effort: a save failure leaves a stale
+// watchlist entry that the next Tick reconciles, so the bool reports only
+// whether the PR was present, not whether the write succeeded.
+func (w Watcher) Remove(ref Ref) bool {
+	key := ref.Key()
+	wl := w.Store.ReadWatchlist()
+	var kept []WatchEntry
+	for _, e := range wl {
+		if e.Ref().Key() != key {
+			kept = append(kept, e)
+		}
+	}
+	if len(kept) == len(wl) {
+		return false
+	}
+	w.Store.SaveWatchlist(kept)
+	state := w.Store.ReadState()
+	delete(state, key)
+	w.Store.SaveState(state)
+	return true
+}
 
 // Tick checks every watched PR once: notify on change, persist fresh
 // snapshots, drop merged/closed. A per-PR fetch error is logged-over: the
@@ -56,56 +109,7 @@ func (w Watcher) Tick() error {
 	return w.Store.SaveWatchlist(kept)
 }
 
-// Add seeds a PR's snapshot without notifying. Returns a status message.
-func (w Watcher) Add(ref Ref) (string, error) {
-	wl := w.Store.ReadWatchlist()
-	key := ref.Key()
-	for _, e := range wl {
-		if e.Ref().Key() == key {
-			return "already watching " + key, nil
-		}
-	}
-	view, err := w.Fetch.Fetch(ref.URL)
-	if err != nil {
-		return "", err
-	}
-	if isClosed(view.State) {
-		return key + " is already closed — not adding", nil
-	}
-	snap := ToSnapshot(view)
-	snap.CheckedAt = w.Now()
-	state := w.Store.ReadState()
-	state[key] = snap
-	if err := w.Store.SaveState(state); err != nil {
-		return "", err
-	}
-	wl = append(wl, WatchEntry{Owner: ref.Owner, Repo: ref.Repo, Number: ref.Number, URL: ref.URL, AddedAt: w.Now()})
-	if err := w.Store.SaveWatchlist(wl); err != nil {
-		return "", err
-	}
-	home, _ := os.UserHomeDir()
-	_ = EnsureAgent(home)
-	return "now watching " + key + " — " + view.Title, nil
-}
-
-func (w Watcher) Remove(ref Ref) bool {
-	key := ref.Key()
-	wl := w.Store.ReadWatchlist()
-	var kept []WatchEntry
-	for _, e := range wl {
-		if e.Ref().Key() != key {
-			kept = append(kept, e)
-		}
-	}
-	if len(kept) == len(wl) {
-		return false
-	}
-	w.Store.SaveWatchlist(kept)
-	state := w.Store.ReadState()
-	delete(state, key)
-	w.Store.SaveState(state)
-	return true
-}
+func isClosed(state string) bool { return state == "MERGED" || state == "CLOSED" }
 
 func join(parts []string, sep string) string {
 	out := ""
