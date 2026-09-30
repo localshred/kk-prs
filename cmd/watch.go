@@ -3,26 +3,71 @@ package cmd
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/localshred/kk-prs/internal/gh"
 	"github.com/localshred/kk-prs/internal/watch"
 	"github.com/localshred/koolkit/pkg/run"
+	"github.com/localshred/koolkit/pkg/ui"
 	"github.com/spf13/cobra"
 )
 
+func checkedAge(snap watch.Snapshot) string {
+	t, err := time.Parse(time.RFC3339, snap.CheckedAt)
+	if err != nil {
+		return ui.Dim("—")
+	}
+	return ui.AgeCell(time.Since(t))
+}
+
 func listWatched(w watch.Watcher, cmd *cobra.Command) error {
+	out := cmd.OutOrStdout()
 	wl := w.Store.ReadWatchlist()
 	if len(wl) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "📭 Not watching any PRs. Add one with: kk prs watch <pr-url>")
+		fmt.Fprintln(out, "📭 Not watching any PRs. Add one with: kk prs watch <pr-url>")
 		return nil
 	}
+	sort.Slice(wl, func(i, j int) bool { return wl[i].Ref().Key() < wl[j].Ref().Key() })
 	state := w.Store.ReadState()
+	rows := make([][]string, 0, len(wl))
 	for _, e := range wl {
-		snap := state[e.Ref().Key()]
-		fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s\n", e.Ref().Key(), snap.Checks, snap.Title)
+		key := e.Ref().Key()
+		snap := state[key]
+		rows = append(rows, []string{
+			ui.Hyperlink(e.URL, ui.Cyan(key)),
+			checkedAge(snap),
+			statusLabel(snap),
+			ui.Green(snap.Title),
+		})
 	}
+	fmt.Fprintf(out, "👀 Watching %d PR(s):\n", len(wl))
+	ui.PrintTable(out, rows)
 	return nil
+}
+
+// statusLabel renders compact status glyphs for a snapshot, matching mx.
+func statusLabel(snap watch.Snapshot) string {
+	checks := map[string]string{"passing": "✅", "failing": "❌", "running": "🔄"}
+	reviews := map[string]string{"APPROVED": "approved", "CHANGES_REQUESTED": "changes-req"}
+	var parts []string
+	switch snap.State {
+	case "MERGED":
+		parts = append(parts, "merged")
+	case "CLOSED":
+		parts = append(parts, "closed")
+	}
+	if g, ok := checks[snap.Checks]; ok {
+		parts = append(parts, g)
+	}
+	if snap.Mergeable == "CONFLICTING" {
+		parts = append(parts, "⚠️")
+	}
+	if r, ok := reviews[snap.ReviewDecision]; ok {
+		parts = append(parts, r)
+	}
+	return strings.Join(parts, " ")
 }
 
 func newWatchCmd() *cobra.Command {
