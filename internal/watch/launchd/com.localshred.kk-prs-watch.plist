@@ -6,8 +6,7 @@
 	<string>com.localshred.kk-prs-watch</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/opt/homebrew/bin/kk</string>
-		<string>prs</string>
+		<string>__PROGRAM__</string>
 		<string>watch</string>
 		<string>tick</string>
 	</array>

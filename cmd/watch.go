@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -94,7 +95,12 @@ func newWatchCmd() *cobra.Command {
 	}
 	c.AddCommand(&cobra.Command{
 		Use: "tick", Short: "Check all watched PRs now (run by launchd)",
-		RunE: func(cmd *cobra.Command, _ []string) error { return newWatcher().Tick() },
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if home, err := os.UserHomeDir(); err == nil {
+				_ = watch.EnsureAgent(home)
+			}
+			return newWatcher().Tick()
+		},
 	})
 	c.AddCommand(&cobra.Command{
 		Use: "list", Short: "List watched PRs",
