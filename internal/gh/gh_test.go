@@ -158,6 +158,35 @@ func TestRecentPRsSinceVariable(t *testing.T) {
 	}
 }
 
+func TestRecentPRsStopsOnEmptyCursor(t *testing.T) {
+	first := `{"data":{"open":{"pageInfo":{"hasNextPage":true,"endCursor":""},"nodes":[
+{"number":1,"title":"t","url":"u","createdAt":"2026-10-01T10:00:00Z","mergedAt":null,"state":"OPEN","baseRefName":"main","author":{"login":"alice"},"repository":{"nameWithOwner":"o/svc-a","defaultBranchRef":{"name":"main"}}}]},
+"merged":{"pageInfo":{"hasNextPage":true,"endCursor":"m1"},"nodes":[
+{"number":2,"title":"t","url":"u","createdAt":"2026-10-01T10:00:00Z","mergedAt":"2026-10-02T10:00:00Z","state":"MERGED","baseRefName":"main","author":{"login":"alice"},"repository":{"nameWithOwner":"o/svc-a","defaultBranchRef":{"name":"main"}}}]}}}`
+	second := `{"data":{"open":{"pageInfo":{"hasNextPage":true,"endCursor":""},"nodes":[
+{"number":1,"title":"t","url":"u","createdAt":"2026-10-01T10:00:00Z","mergedAt":null,"state":"OPEN","baseRefName":"main","author":{"login":"alice"},"repository":{"nameWithOwner":"o/svc-a","defaultBranchRef":{"name":"main"}}}]},
+"merged":{"pageInfo":{"hasNextPage":true,"endCursor":""},"nodes":[
+{"number":3,"title":"t","url":"u","createdAt":"2026-10-01T10:00:00Z","mergedAt":"2026-10-04T10:00:00Z","state":"MERGED","baseRefName":"main","author":{"login":"alice"},"repository":{"nameWithOwner":"o/svc-a","defaultBranchRef":{"name":"main"}}}]}}}`
+	stub := &ghStub{results: []run.Result{{Stdout: first}, {Stdout: second}}}
+	prs, err := Client{Run: stub}.RecentPRs("alice", time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stub.calls) != 2 {
+		t.Fatalf("calls = %d, want 2", len(stub.calls))
+	}
+	if hasArgPrefix(stub.calls[1], "openCursor=") {
+		t.Fatalf("second call carries an open cursor: %v", stub.calls[1])
+	}
+	var numbers []int
+	for _, pr := range prs {
+		numbers = append(numbers, pr.Number)
+	}
+	if len(numbers) != 3 || numbers[0] != 1 || numbers[1] != 2 || numbers[2] != 3 {
+		t.Fatalf("numbers = %v", numbers)
+	}
+}
+
 func containsArg(args []string, want string) bool {
 	for _, a := range args {
 		if a == want {

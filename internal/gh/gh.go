@@ -76,7 +76,8 @@ func (c Client) Checks(repo string, number int) []Check {
 }
 
 // RecentPRs returns the author's open PRs and the PRs they merged on or after
-// since, using one paginated gh api graphql call per page. author may be
+// since, using one paginated gh api graphql call per page. A search stops
+// paginating when a page has no next page or no end cursor. author may be
 // "@me". Bodies are fetched only when withBody is true.
 func (c Client) RecentPRs(author string, since time.Time, withBody bool) ([]BoardPR, error) {
 	openQuery := fmt.Sprintf("is:pr is:open author:%s", author)
@@ -114,8 +115,8 @@ func (c Client) RecentPRs(author string, since time.Time, withBody bool) ([]Boar
 		if prs, err = appendBoardPRs(prs, resp.Data.Merged, mergedDone); err != nil {
 			return nil, err
 		}
-		openDone = openDone || !resp.Data.Open.PageInfo.HasNextPage
-		mergedDone = mergedDone || !resp.Data.Merged.PageInfo.HasNextPage
+		openDone = openDone || !resp.Data.Open.PageInfo.HasNextPage || resp.Data.Open.PageInfo.EndCursor == ""
+		mergedDone = mergedDone || !resp.Data.Merged.PageInfo.HasNextPage || resp.Data.Merged.PageInfo.EndCursor == ""
 		if !openDone {
 			openCursor = resp.Data.Open.PageInfo.EndCursor
 		}
