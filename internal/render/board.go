@@ -14,6 +14,7 @@ const (
 	cardInnerWidth = 22
 	laneGap        = 2
 	laneWidth      = cardInnerWidth + 2
+	titleLines     = 3
 )
 
 var glyphColors = map[string]func(string) string{
@@ -79,7 +80,9 @@ func cardLines(c board.Card, short bool, showAuthor bool, now time.Time) []strin
 	if c.WorkItemID != "" {
 		body = append(body, fit(c.WorkItemID, func(s string) string { return ui.Hyperlink(c.WorkItemURL, s) }, cardInnerWidth))
 	}
-	body = append(body, fit(c.PR.Title, nil, cardInnerWidth))
+	for _, l := range wrapTitle(c.PR.Title, cardInnerWidth, titleLines) {
+		body = append(body, fit(l, nil, cardInnerWidth))
+	}
 	body = append(body, stateLine(c, now))
 	if c.Reason != "" {
 		body = append(body, fit(c.Reason, ui.Dim, cardInnerWidth))
@@ -193,13 +196,13 @@ func sharedOwner(lanes []board.Lane) bool {
 
 func stateLine(c board.Card, now time.Time) string {
 	if c.PR.State == "MERGED" {
-		return fit("merged "+ui.Humanize(now.Sub(c.PR.MergedAt)), nil, cardInnerWidth)
+		return fit("merged "+ui.Humanize(now.Sub(c.PR.MergedAt)), ui.Dim, cardInnerWidth)
 	}
 	age := "opened " + ui.Humanize(now.Sub(c.PR.CreatedAt))
 	if color, ok := glyphColors[c.CheckGlyph]; ok {
-		return color(c.CheckGlyph) + " " + fit(age, nil, cardInnerWidth-2)
+		return color(c.CheckGlyph) + " " + fit(age, ui.Dim, cardInnerWidth-2)
 	}
-	return fit(age, nil, cardInnerWidth)
+	return fit(age, ui.Dim, cardInnerWidth)
 }
 
 func truncate(s string, width int) string {
@@ -215,4 +218,35 @@ func viaText(via string) string {
 		return "↳ via hotfix " + via
 	}
 	return "↳ via " + via
+}
+
+func wrapTitle(title string, width, maxLines int) []string {
+	var lines []string
+	var line []rune
+	for _, word := range strings.Fields(title) {
+		r := []rune(word)
+		if len(line) > 0 && len(line)+1+len(r) <= width {
+			line = append(append(line, ' '), r...)
+			continue
+		}
+		if len(line) > 0 {
+			lines = append(lines, string(line))
+		}
+		for len(r) > width {
+			lines = append(lines, string(r[:width]))
+			r = r[width:]
+		}
+		line = r
+	}
+	if len(line) > 0 {
+		lines = append(lines, string(line))
+	}
+	if len(lines) == 0 {
+		return []string{""}
+	}
+	if len(lines) > maxLines {
+		rest := strings.Join(lines[maxLines-1:], " ")
+		lines = append(lines[:maxLines-1], truncate(rest, width))
+	}
+	return lines
 }

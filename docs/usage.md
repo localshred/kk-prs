@@ -124,11 +124,18 @@ to right, newest card first within each lane:
   `+N older releases` line.
 
 Each card shows the linked `repo#number` (the owner is dropped when every
-card shares it), an optional linked work item ID, the title, `merged <age>`
-or `opened <age>`, the reason (pending lane), `in release <age>` when the
+card shares it), an optional linked work item ID, the title (wrapped over
+up to three lines, then cut with `…`), a dimmed `merged <age>` or
+`opened <age>`, the reason (pending lane), `in release <age>` when the
 time it reached the release is known, `↳ via hotfix #N` or `↳ via
 cherry-pick` when the PR arrived on a release branch some other way, and
 `@author` when more than one author is shown or `--author` is not `@me`.
+
+`merged` is when the PR merged into its own base branch. `in release` is
+when that change reached the release branch, e.g. when a hotfix branch was
+merged into the release or a cherry-pick landed there. It only shows when
+it differs from the release's cut, so a PR that came in with the cut shows
+just `merged`.
 
 ### Flags
 

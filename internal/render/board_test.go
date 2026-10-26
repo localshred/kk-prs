@@ -144,7 +144,7 @@ func TestBoardCardLines(t *testing.T) {
 	c.Reason = "on main"
 	c.InReleaseAt = boardNow.Add(-24 * time.Hour)
 	c.Via = "#16450"
-	c.PR.Title = "a title that is much longer than the inner width"
+	c.PR.Title = "a title that is much longer than three lines of the inner card width allow"
 	l := releaseLane("release-A", c)
 	out := plainBoard(board.Board{Lanes: []board.Lane{l}}, 200, true)
 	for _, want := range []string{"WI-1234", "on main", "in release 1d", "↳ via hotfix #16450", "merged 2d", "@alice", "…│"} {
@@ -159,6 +159,21 @@ func TestBoardCardLines(t *testing.T) {
 	}
 	if strings.Contains(out, "@alice") {
 		t.Errorf("author shown unexpectedly")
+	}
+}
+
+func TestBoardDimsStateLine(t *testing.T) {
+	open := openCard("o/svc-a", 1, "one")
+	open.CheckGlyph = "✓"
+	b := board.Board{Lanes: []board.Lane{
+		{Kind: board.LaneOpen, Name: "OPEN", Cards: []board.Card{open}},
+		releaseLane("release-A", mergedCard("o/svc-a", 2)),
+	}}
+	out := Board(b, 200, false, boardNow)
+	for _, want := range []string{ui.Dim("merged 2d"), ui.Green("✓") + " " + ui.Dim("opened 3d")} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing dimmed state %q in:\n%q", want, out)
+		}
 	}
 }
 
@@ -209,4 +224,43 @@ func boxTopRows(t *testing.T, out string, lanes int) []int {
 		}
 	}
 	return rows
+}
+
+func TestBoardWrapsTitle(t *testing.T) {
+	c := mergedCard("o/svc-a", 1)
+	c.PR.Title = "remove the stale feature flag from billing service settings page and docs"
+	out := plainBoard(board.Board{Lanes: []board.Lane{releaseLane("release-A", c)}}, 200, false)
+	for _, want := range []string{
+		"│remove the stale      │",
+		"│feature flag from     │",
+		"│billing service setti…│",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "page and docs") {
+		t.Errorf("title not capped at three lines:\n%s", out)
+	}
+}
+
+func TestWrapTitle(t *testing.T) {
+	tests := []struct {
+		name  string
+		title string
+		want  []string
+	}{
+		{"short", "one", []string{"one"}},
+		{"exact", "abcdefghij klmnopqrstu", []string{"abcdefghij klmnopqrstu"}},
+		{"two lines", "fix the login redirect loop on expiry", []string{"fix the login redirect", "loop on expiry"}},
+		{"long word", "abcdefghijklmnopqrstuvwxyz0123", []string{"abcdefghijklmnopqrstuv", "wxyz0123"}},
+		{"empty", "", []string{""}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := wrapTitle(tt.title, 22, 3); !slices.Equal(got, tt.want) {
+				t.Errorf("wrapTitle(%q) = %q, want %q", tt.title, got, tt.want)
+			}
+		})
+	}
 }
