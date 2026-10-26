@@ -46,6 +46,11 @@ func Place(in Input) Board {
 			pending = append(pending, card)
 			continue
 		}
+		if pr.MergeOID == "" {
+			card.Reason = pendingReason(in.Settings, pr)
+			pending = append(pending, card)
+			continue
+		}
 		releases := h.Releases()
 		if len(releases) == 0 {
 			card.Reason = ReasonNoReleases
@@ -90,9 +95,6 @@ func Place(in Input) Board {
 }
 
 func ancestry(cache *Cache, h History, releases []Release, pr gh.BoardPR) (int, bool) {
-	if pr.MergeOID == "" {
-		return 0, false
-	}
 	key := fmt.Sprintf("%s#%d", pr.Repo, pr.Number)
 	if cached, ok := cache.Get(key); ok {
 		if i := slices.IndexFunc(releases, func(r Release) bool { return r.Name == cached }); i >= 0 {
@@ -110,6 +112,9 @@ func ancestry(cache *Cache, h History, releases []Release, pr gh.BoardPR) (int, 
 
 func laneCutAts(histories map[string]History, lanes map[string][]Card) map[string]time.Time {
 	cutAts := map[string]time.Time{}
+	if len(lanes) == 0 {
+		return cutAts
+	}
 	for _, h := range histories {
 		for _, r := range h.Releases() {
 			if _, shown := lanes[r.Name]; shown && r.CutAt.After(cutAts[r.Name]) {

@@ -11,11 +11,14 @@ import (
 )
 
 type fakeHistory struct {
-	containCalls []string
-	contains     map[string]bool
-	introduced   map[string]time.Time
-	picks        map[string]Pick
-	releases     []Release
+	containCalls    []string
+	contains        map[string]bool
+	findPickCalls   int
+	introduced      map[string]time.Time
+	introducedCalls int
+	picks           map[string]Pick
+	releases        []Release
+	releasesCalls   int
 }
 
 func (f *fakeHistory) Contains(oid, release string) bool {
@@ -24,16 +27,19 @@ func (f *fakeHistory) Contains(oid, release string) bool {
 }
 
 func (f *fakeHistory) FindPick(oid string, number int, release string) (Pick, bool) {
+	f.findPickCalls++
 	p, ok := f.picks[oid+"@"+release]
 	return p, ok
 }
 
 func (f *fakeHistory) IntroducedAt(oid, release string) (time.Time, bool) {
+	f.introducedCalls++
 	t, ok := f.introduced[oid+"@"+release]
 	return t, ok
 }
 
 func (f *fakeHistory) Releases() []Release {
+	f.releasesCalls++
 	return f.releases
 }
 
@@ -217,8 +223,16 @@ func TestPlaceEmptyMergeOID(t *testing.T) {
 	if card.Reason != "on main" {
 		t.Fatalf("Reason = %q", card.Reason)
 	}
-	if len(h.containCalls) != 0 {
-		t.Fatalf("Contains called: %v", h.containCalls)
+	calls := map[string]int{
+		"Contains":     len(h.containCalls),
+		"FindPick":     h.findPickCalls,
+		"IntroducedAt": h.introducedCalls,
+		"Releases":     h.releasesCalls,
+	}
+	for method, n := range calls {
+		if n != 0 {
+			t.Errorf("%s called %d times", method, n)
+		}
 	}
 }
 
