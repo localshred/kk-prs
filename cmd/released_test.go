@@ -125,6 +125,18 @@ func TestReleasedMirrorFailureWarns(t *testing.T) {
 	}
 }
 
+func execReleased(t *testing.T, r run.Runner, args ...string) string {
+	t.Helper()
+	var out bytes.Buffer
+	cmd := newReleasedCmd(r)
+	cmd.SetOut(&out)
+	cmd.SetArgs(args)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("released: %v", err)
+	}
+	return ui.StripANSI(out.String())
+}
+
 func graphqlJSON(nodes ...string) string {
 	var open, merged []string
 	for _, n := range nodes {
@@ -199,18 +211,6 @@ func newReleasedFixture(t *testing.T, settings []string) *releasedFixture {
 func openNode(number int, title, author, repo string) string {
 	return fmt.Sprintf(`{"number":%d,"title":%q,"url":"https://example.com/%s/pull/%d","createdAt":%q,"mergedAt":null,"state":"OPEN","baseRefName":"main","mergeCommit":null,"author":{"login":%q},"repository":{"nameWithOwner":%q,"defaultBranchRef":{"name":"main"}}}`,
 		number, title, repo, number, time.Now().Add(-time.Hour).UTC().Format(time.RFC3339), author, repo)
-}
-
-func execReleased(t *testing.T, r run.Runner, args ...string) string {
-	t.Helper()
-	var out bytes.Buffer
-	cmd := newReleasedCmd(r)
-	cmd.SetOut(&out)
-	cmd.SetArgs(args)
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("released: %v", err)
-	}
-	return ui.StripANSI(out.String())
 }
 
 func writeGitConfig(t *testing.T, root string, settings []string) {

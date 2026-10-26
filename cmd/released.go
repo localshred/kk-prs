@@ -20,6 +20,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+type releasedOptions struct {
+	authors []string
+	refresh bool
+	verbose bool
+	weeks   int
+}
+
 const (
 	defaultWidth   = 120
 	maxOpenMirrors = 4
@@ -30,34 +37,6 @@ var checkGlyphs = map[string]string{
 	"✅": "✓",
 	"❌": "✗",
 	"🔄": "↻",
-}
-
-func newReleasedCmd(r run.Runner) *cobra.Command {
-	var weeks int
-	var authors []string
-	var refresh, verbose bool
-	cmd := &cobra.Command{
-		Use:   "released",
-		Short: "Show recent PRs as a board of the releases they reached",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runReleased(r, releasedOptions{
-				authors: authors, refresh: refresh, verbose: verbose, weeks: weeks,
-			}, cmd.OutOrStdout())
-		},
-	}
-	cmd.Flags().IntVar(&weeks, "weeks", 0, "Weeks of merged PRs to include (default kk.prs.weeks, else 4)")
-	cmd.Flags().StringArrayVar(&authors, "author", []string{"@me"}, "PR author to include; repeatable")
-	cmd.Flags().BoolVar(&refresh, "refresh", false, "Fetch every mirror even if recently fetched")
-	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed check status for open PRs")
-	return cmd
-}
-
-type releasedOptions struct {
-	authors []string
-	refresh bool
-	verbose bool
-	weeks   int
 }
 
 func boardWidth() int {
@@ -110,6 +89,36 @@ func headerLine(authors []string, weeks int) string {
 	return fmt.Sprintf("🚢 Releases for %s (last %d %s)", strings.Join(authors, ", "), weeks, noun)
 }
 
+func newReleasedCmd(r run.Runner) *cobra.Command {
+	var weeks int
+	var authors []string
+	var refresh, verbose bool
+	cmd := &cobra.Command{
+		Use:   "released",
+		Short: "Show recent PRs as a board of the releases they reached",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runReleased(r, releasedOptions{
+				authors: authors, refresh: refresh, verbose: verbose, weeks: weeks,
+			}, cmd.OutOrStdout())
+		},
+	}
+	cmd.Flags().IntVar(&weeks, "weeks", 0, "Weeks of merged PRs to include (default kk.prs.weeks, else 4)")
+	cmd.Flags().StringArrayVar(&authors, "author", []string{"@me"}, "PR author to include; repeatable")
+	cmd.Flags().BoolVar(&refresh, "refresh", false, "Fetch every mirror even if recently fetched")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed check status for open PRs")
+	return cmd
+}
+
+func openCards(c gh.Client, open []gh.BoardPR) []board.Card {
+	cards := make([]board.Card, 0, len(open))
+	for _, pr := range open {
+		checks := filterChecks(c.Checks(pr.Repo, pr.Number))
+		cards = append(cards, board.Card{PR: pr, CheckGlyph: checkGlyphs[render.OverallStatus(checks)]})
+	}
+	return cards
+}
+
 func openHistories(m mirror.Mirror, s config.Settings, merged []gh.BoardPR, force bool) (map[string]board.History, []string) {
 	defaults := map[string]string{}
 	var repos []string
@@ -148,15 +157,6 @@ func openHistories(m mirror.Mirror, s config.Settings, merged []gh.BoardPR, forc
 		}
 	}
 	return histories, out
-}
-
-func openCards(c gh.Client, open []gh.BoardPR) []board.Card {
-	cards := make([]board.Card, 0, len(open))
-	for _, pr := range open {
-		checks := filterChecks(c.Checks(pr.Repo, pr.Number))
-		cards = append(cards, board.Card{PR: pr, CheckGlyph: checkGlyphs[render.OverallStatus(checks)]})
-	}
-	return cards
 }
 
 func runReleased(r run.Runner, opts releasedOptions, out io.Writer) error {
