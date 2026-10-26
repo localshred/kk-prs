@@ -68,7 +68,7 @@ func TestReleasedDedupesAuthors(t *testing.T) {
 		openNode(10, "Open work", "alice", "o/svc-a"),
 		mergedNode(1, "Merged one", "alice", "o/svc-a", "main", fx.oneOID),
 	)
-	out := execReleased(t, routeRunner{graphql: graphql}, "--author", "alice", "--author", "alice")
+	out, _ := execReleased(t, routeRunner{graphql: graphql}, "--author", "alice", "--author", "alice")
 	if n := strings.Count(out, "svc-a#10"); n != 1 {
 		t.Errorf("open card appears %d times:\n%s", n, out)
 	}
@@ -78,7 +78,7 @@ func TestReleasedDedupesAuthors(t *testing.T) {
 	if !strings.Contains(out, "@alice") {
 		t.Errorf("missing @alice:\n%s", out)
 	}
-	if !strings.Contains(out, "🚢 Releases for alice, alice (last 4 weeks)") {
+	if !strings.Contains(out, "🚢 Releases for alice (last 4 weeks)") {
 		t.Errorf("missing header:\n%s", out)
 	}
 	if !strings.Contains(out, "OPEN (1)") {
@@ -86,6 +86,20 @@ func TestReleasedDedupesAuthors(t *testing.T) {
 	}
 	if !strings.Contains(out, "release-A (1)") {
 		t.Errorf("merged PR not placed in release-A:\n%s", out)
+	}
+}
+
+func TestReleasedDedupesMe(t *testing.T) {
+	fx := newReleasedFixture(t, nil)
+	graphql := graphqlJSON(
+		mergedNode(1, "Merged one", "alice", "o/svc-a", "main", fx.oneOID),
+	)
+	out, _ := execReleased(t, routeRunner{graphql: graphql}, "--author", "@me", "--author", "@me")
+	if !strings.Contains(out, "🚢 Releases for @me (last 4 weeks)") {
+		t.Errorf("missing header:\n%s", out)
+	}
+	if strings.Contains(out, "@alice") {
+		t.Errorf("author shown for @me only:\n%s", out)
 	}
 }
 
@@ -97,7 +111,7 @@ func TestReleasedIgnoresRepo(t *testing.T) {
 		openNode(20, "Sdk work", "alice", "o/sdk"),
 		mergedNode(21, "Sdk merged", "alice", "o/sdk", "main", fx.oneOID),
 	)
-	out := execReleased(t, routeRunner{graphql: graphql}, "--author", "alice")
+	out, _ := execReleased(t, routeRunner{graphql: graphql}, "--author", "alice")
 	if strings.Contains(out, "sdk#") {
 		t.Errorf("ignored repo shown:\n%s", out)
 	}
@@ -113,9 +127,15 @@ func TestReleasedMirrorFailureWarns(t *testing.T) {
 	graphql := graphqlJSON(
 		mergedNode(1, "Merged one", "alice", "o/svc-a", "main", fx.oneOID),
 	)
-	out := execReleased(t, routeRunner{graphql: graphql}, "--author", "alice")
-	if !strings.Contains(out, "⚠ o/svc-a:") {
-		t.Errorf("missing warning:\n%s", out)
+	out, _ := execReleased(t, routeRunner{graphql: graphql}, "--author", "alice")
+	var warning string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "⚠") {
+			warning = line
+		}
+	}
+	if !strings.HasPrefix(warning, "⚠ mirror o/svc-a: ") || strings.Count(warning, "o/svc-a: ") != 1 {
+		t.Errorf("warning should name the repo once, got %q in:\n%s", warning, out)
 	}
 	if !strings.Contains(out, "NOT IN A RELEASE (1)") {
 		t.Errorf("missing pending lane header:\n%s", out)
@@ -125,16 +145,33 @@ func TestReleasedMirrorFailureWarns(t *testing.T) {
 	}
 }
 
-func execReleased(t *testing.T, r run.Runner, args ...string) string {
+func TestReleasedProgressOnStderr(t *testing.T) {
+	fx := newReleasedFixture(t, nil)
+	graphql := graphqlJSON(
+		mergedNode(1, "Merged one", "alice", "o/svc-a", "main", fx.oneOID),
+	)
+	out, errOut := execReleased(t, routeRunner{graphql: graphql}, "--author", "alice")
+	if !strings.Contains(errOut, "🔄 Syncing 1 repo mirror…") {
+		t.Errorf("missing progress on stderr: %q", errOut)
+	}
+	if strings.Contains(out, "Syncing") {
+		t.Errorf("progress leaked to stdout:\n%s", out)
+	}
+}
+
+// execReleased runs the released command and returns its stdout and stderr
+// with ANSI escapes stripped.
+func execReleased(t *testing.T, r run.Runner, args ...string) (string, string) {
 	t.Helper()
-	var out bytes.Buffer
+	var out, errOut bytes.Buffer
 	cmd := newReleasedCmd(r)
 	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
 	cmd.SetArgs(args)
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("released: %v", err)
 	}
-	return ui.StripANSI(out.String())
+	return ui.StripANSI(out.String()), ui.StripANSI(errOut.String())
 }
 
 func graphqlJSON(nodes ...string) string {

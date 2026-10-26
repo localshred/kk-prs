@@ -115,8 +115,8 @@ to right, newest card first within each lane:
   reason line: `on <branch>` (merged to a trunk, not yet released),
   `→ <branch> · waiting` (merged to a non-trunk base), `no releases` (the
   repo has no release branches), or `release status unknown` (the mirror
-  could not be fetched; a `⚠ <repo>: <error>` warning is printed under the
-  board).
+  could not be fetched; a `⚠ mirror <repo>: <error>` warning is printed
+  under the board).
 - One lane per release branch, newest release first, headed with its name
   and card count, and a `cut ~<date> (<age>)` line. A PR is placed in the
   earliest release containing its merge commit, or a cherry-pick of it.

@@ -100,7 +100,7 @@ func newReleasedCmd(r run.Runner) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runReleased(r, releasedOptions{
 				authors: authors, refresh: refresh, verbose: verbose, weeks: weeks,
-			}, cmd.OutOrStdout())
+			}, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	cmd.Flags().IntVar(&weeks, "weeks", 0, "Weeks of merged PRs to include (default kk.prs.weeks, else 4)")
@@ -119,7 +119,7 @@ func openCards(c gh.Client, open []gh.BoardPR) []board.Card {
 	return cards
 }
 
-func openHistories(m mirror.Mirror, s config.Settings, merged []gh.BoardPR, force bool) (map[string]board.History, []string) {
+func openHistories(m mirror.Mirror, s config.Settings, merged []gh.BoardPR, force bool, progress io.Writer) (map[string]board.History, []string) {
 	defaults := map[string]string{}
 	var repos []string
 	for _, pr := range merged {
@@ -127,6 +127,13 @@ func openHistories(m mirror.Mirror, s config.Settings, merged []gh.BoardPR, forc
 			defaults[pr.Repo] = pr.DefaultBranch
 			repos = append(repos, pr.Repo)
 		}
+	}
+	if len(repos) > 0 {
+		noun := "mirrors"
+		if len(repos) == 1 {
+			noun = "mirror"
+		}
+		fmt.Fprintf(progress, "🔄 Syncing %d repo %s…\n", len(repos), noun)
 	}
 	histories := map[string]board.History{}
 	warnings := make([]string, len(repos))
@@ -143,7 +150,7 @@ func openHistories(m mirror.Mirror, s config.Settings, merged []gh.BoardPR, forc
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				warnings[i] = fmt.Sprintf("⚠ %s: %s", repo, firstLine(err))
+				warnings[i] = "⚠ " + firstLine(err)
 				return
 			}
 			histories[repo] = opened
@@ -159,15 +166,16 @@ func openHistories(m mirror.Mirror, s config.Settings, merged []gh.BoardPR, forc
 	return histories, out
 }
 
-func runReleased(r run.Runner, opts releasedOptions, out io.Writer) error {
+func runReleased(r run.Runner, opts releasedOptions, out, progress io.Writer) error {
 	s := config.Load(r)
+	authors := uniqueAuthors(opts.authors)
 	weeks := opts.weeks
 	if weeks <= 0 {
 		weeks = s.Weeks
 	}
 	now := time.Now()
 	c := gh.Client{Run: r}
-	prs, err := collectPRs(c, s, opts.authors, now.Add(-time.Duration(weeks)*7*24*time.Hour))
+	prs, err := collectPRs(c, s, authors, now.Add(-time.Duration(weeks)*7*24*time.Hour))
 	if err != nil {
 		return err
 	}
@@ -188,7 +196,7 @@ func runReleased(r run.Runner, opts releasedOptions, out io.Writer) error {
 		Root:     filepath.Join(cacheRoot, "prs-mirrors"),
 		Run:      r,
 	}
-	histories, warnings := openHistories(m, s, merged, opts.refresh)
+	histories, warnings := openHistories(m, s, merged, opts.refresh, progress)
 	cache := board.LoadCache(filepath.Join(cacheRoot, "prs", "placements.json"))
 	b := board.Place(board.Input{
 		Cache:     cache,
@@ -202,8 +210,8 @@ func runReleased(r run.Runner, opts releasedOptions, out io.Writer) error {
 		b.Warnings = append(b.Warnings, "⚠ placement cache: "+firstLine(err))
 	}
 
-	fmt.Fprintf(out, "%s\n\n", headerLine(opts.authors, weeks))
-	fmt.Fprint(out, render.Board(b, boardWidth(), showAuthor(opts.authors), now))
+	fmt.Fprintf(out, "%s\n\n", headerLine(authors, weeks))
+	fmt.Fprint(out, render.Board(b, boardWidth(), showAuthor(authors), now))
 	for _, w := range b.Warnings {
 		fmt.Fprintln(out, w)
 	}
@@ -232,4 +240,16 @@ func toPR(b gh.BoardPR) gh.PR {
 	pr.Repository.NameWithOwner = b.Repo
 	pr.Author.Login = b.Author
 	return pr
+}
+
+func uniqueAuthors(authors []string) []string {
+	seen := map[string]bool{}
+	var unique []string
+	for _, a := range authors {
+		if !seen[a] {
+			seen[a] = true
+			unique = append(unique, a)
+		}
+	}
+	return unique
 }
