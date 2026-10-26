@@ -262,7 +262,7 @@ func TestPlaceLaneOrder(t *testing.T) {
 		},
 		Open: []Card{{PR: open, CheckGlyph: "✓"}},
 	})
-	want := []string{"", "", "release-B", "release-A"}
+	want := []string{"OPEN", "NOT IN A RELEASE", "release-B", "release-A"}
 	kinds := []LaneKind{LaneOpen, LanePending, LaneRelease, LaneRelease}
 	if len(board.Lanes) != len(want) {
 		t.Fatalf("lanes = %+v", board.Lanes)

@@ -93,37 +93,41 @@ history from kk-owned bare mirrors of each repo (see below), so it does not
 touch your own clones.
 
 ```
-🚢 Releases for @me (last 4 weeks)
+🚢 Releases for alice (last 4 weeks)
 
-open (1)                 release-B (1)
-┌──────────────────────┐ ┌──────────────────────┐
-│svc-a#12              │ │svc-a#10              │
-│WI-1234               │ │Add retry logic       │
-│Add caching           │ │merged 2d             │
-│✓ opened 1d           │ │in release 1d         │
-└──────────────────────┘ └──────────────────────┘
+OPEN (1)                  NOT IN A RELEASE (1)      release-A (1)
+┌──────────────────────┐  ┌──────────────────────┐  cut ~Oct 24 (1d)
+│svc-a#12              │  │svc-a#2               │  ┌──────────────────────┐
+│WI-1234               │  │Tune timeouts         │  │svc-a#1               │
+│Add caching WI-1234   │  │merged 0m             │  │Add retry logic       │
+│opened 1h             │  │on main               │  │merged 0m             │
+│@alice                │  │@alice                │  │@alice                │
+└──────────────────────┘  └──────────────────────┘  └──────────────────────┘
 ```
 
-Lanes, left to right:
+The example above comes from `kk prs released --author alice`. Lanes, left
+to right, newest card first within each lane:
 
-- `open`: your open PRs, oldest first, with a check glyph (`✓` passing,
-  `✗` failing, `↻` running) on the age line.
-- `pending`: merged PRs that have not reached any release, with a reason:
-  `on <branch>` (merged to a trunk, not yet released), `→ <branch> ·
-  waiting` (merged to a non-trunk base), `no releases` (the repo has no
-  release branches), or `release status unknown` (the mirror could not be
-  fetched; a `⚠ <repo>: <error>` warning is printed under the board).
-- One lane per release branch, newest first, headed with its name, card
-  count, and an approximate cut date. A PR is placed in the earliest
-  release containing its merge commit, or a cherry-pick of it. Lanes that
-  do not fit the terminal width are folded into a final `+N older releases`
-  line.
+- `OPEN`: your open PRs. A check glyph (`✓` passing, `✗` failing, `↻`
+  running) precedes the age on the `opened <age>` line.
+- `NOT IN A RELEASE`: merged PRs that have not reached any release, with a
+  reason line: `on <branch>` (merged to a trunk, not yet released),
+  `→ <branch> · waiting` (merged to a non-trunk base), `no releases` (the
+  repo has no release branches), or `release status unknown` (the mirror
+  could not be fetched; a `⚠ <repo>: <error>` warning is printed under the
+  board).
+- One lane per release branch, newest release first, headed with its name
+  and card count, and a `cut ~<date> (<age>)` line. A PR is placed in the
+  earliest release containing its merge commit, or a cherry-pick of it.
+  Lanes that do not fit the terminal width are folded into a final
+  `+N older releases` line.
 
-Each card shows the linked `repo#number`, an optional linked work item ID,
-the title, `merged <age> ago` (or `opened <age> ago`), the pending reason,
-`in release <age>` once placed, `↳ via hotfix #N` or `↳ via cherry-pick`
-when the PR arrived on a release branch some other way, and `@author` when
-more than one author is shown or `--author` is not `@me`.
+Each card shows the linked `repo#number` (the owner is dropped when every
+card shares it), an optional linked work item ID, the title, `merged <age>`
+or `opened <age>`, the reason (pending lane), `in release <age>` when the
+time it reached the release is known, `↳ via hotfix #N` or `↳ via
+cherry-pick` when the PR arrived on a release branch some other way, and
+`@author` when more than one author is shown or `--author` is not `@me`.
 
 ### Flags
 

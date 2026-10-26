@@ -64,11 +64,11 @@ func Place(in Input) Board {
 	var board Board
 	if len(open) > 0 {
 		sortCards(open, func(c Card) time.Time { return c.PR.CreatedAt })
-		board.Lanes = append(board.Lanes, Lane{Cards: open, Kind: LaneOpen})
+		board.Lanes = append(board.Lanes, Lane{Cards: open, Kind: LaneOpen, Name: NameOpen})
 	}
 	if len(pending) > 0 {
 		sortCards(pending, mergedAt)
-		board.Lanes = append(board.Lanes, Lane{Cards: pending, Kind: LanePending})
+		board.Lanes = append(board.Lanes, Lane{Cards: pending, Kind: LanePending, Name: NamePending})
 	}
 	names := make([]string, 0, len(releaseCards))
 	for name := range releaseCards {

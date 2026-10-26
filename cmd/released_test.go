@@ -81,6 +81,9 @@ func TestReleasedDedupesAuthors(t *testing.T) {
 	if !strings.Contains(out, "🚢 Releases for alice, alice (last 4 weeks)") {
 		t.Errorf("missing header:\n%s", out)
 	}
+	if !strings.Contains(out, "OPEN (1)") {
+		t.Errorf("missing OPEN lane header:\n%s", out)
+	}
 	if !strings.Contains(out, "release-A (1)") {
 		t.Errorf("merged PR not placed in release-A:\n%s", out)
 	}
@@ -113,6 +116,9 @@ func TestReleasedMirrorFailureWarns(t *testing.T) {
 	out := execReleased(t, routeRunner{graphql: graphql}, "--author", "alice")
 	if !strings.Contains(out, "⚠ o/svc-a:") {
 		t.Errorf("missing warning:\n%s", out)
+	}
+	if !strings.Contains(out, "NOT IN A RELEASE (1)") {
+		t.Errorf("missing pending lane header:\n%s", out)
 	}
 	if !strings.Contains(out, "release status unknown") {
 		t.Errorf("missing unknown reason:\n%s", out)

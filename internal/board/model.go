@@ -62,6 +62,12 @@ const (
 	LaneRelease
 )
 
+// Names of the open and pending lanes.
+const (
+	NameOpen    = "OPEN"
+	NamePending = "NOT IN A RELEASE"
+)
+
 // Reason strings shown on pending-lane cards.
 const (
 	ReasonNoReleases = "no releases"
