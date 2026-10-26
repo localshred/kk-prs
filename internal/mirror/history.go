@@ -10,7 +10,7 @@ import (
 	"github.com/localshred/kk-prs/internal/board"
 )
 
-const releasesPerPattern = 8
+const maxReleases = 8
 
 var trailingPRNumber = regexp.MustCompile(`\(#(\d+)\)\s*$`)
 
@@ -63,29 +63,36 @@ func (r *Repo) IntroducedAt(oid, release string) (time.Time, bool) {
 	return at, true
 }
 
-// Releases lists the mirrored release branches matching Patterns, up to
-// eight per pattern, newest first. CutAt is the committer date of the
-// branch's fork point from the default branch, zero when that is unknown.
+// Releases lists the newest mirrored release branches matching Patterns,
+// at most eight across all patterns, newest first by board.VersionLess.
+// CutAt is the committer date of the branch's fork point from the default
+// branch, zero when that is unknown.
 func (r *Repo) Releases() []board.Release {
 	seen := map[string]bool{}
-	releases := []board.Release{}
+	names := []string{}
 	for _, pattern := range r.Patterns {
-		out, err := r.git("for-each-ref", "--sort=-version:refname", "--count="+strconv.Itoa(releasesPerPattern), "--format=%(refname:short)", originPrefix+pattern)
+		out, err := r.git("for-each-ref", "--format=%(refname:short)", originPrefix+pattern)
 		if err != nil {
 			continue
 		}
 		for _, short := range strings.Fields(out) {
 			name := strings.TrimPrefix(short, "origin/")
-			if seen[name] {
-				continue
+			if !seen[name] {
+				seen[name] = true
+				names = append(names, name)
 			}
-			seen[name] = true
-			releases = append(releases, board.Release{CutAt: r.cutAt(name), Name: name})
 		}
 	}
-	sort.SliceStable(releases, func(i, j int) bool {
-		return board.VersionLess(releases[j].Name, releases[i].Name)
+	sort.SliceStable(names, func(i, j int) bool {
+		return board.VersionLess(names[j], names[i])
 	})
+	if len(names) > maxReleases {
+		names = names[:maxReleases]
+	}
+	releases := []board.Release{}
+	for _, name := range names {
+		releases = append(releases, board.Release{CutAt: r.cutAt(name), Name: name})
+	}
 	return releases
 }
 

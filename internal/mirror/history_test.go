@@ -1,6 +1,8 @@
 package mirror
 
 import (
+	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/localshred/kk-prs/internal/board"
@@ -79,6 +81,28 @@ func TestIntroducedAt(t *testing.T) {
 	}
 	if at, ok := repo.IntroducedAt(fx.oids["#2"], "release-B"); ok {
 		t.Errorf("(#2) came with the cut, got %v", at)
+	}
+}
+
+func TestReleasesCapsAtEightAcrossPatterns(t *testing.T) {
+	fx := newFixture(t)
+	for i := 1; i <= 9; i++ {
+		fx.git(fx.remote, fixtureBase, "update-ref", fmt.Sprintf("refs/heads/release-%d", i), fx.oids["#1"])
+	}
+	fx.git(fx.remote, fixtureBase, "update-ref", "refs/heads/release/2.0", fx.oids["#1"])
+	m, _ := newMirror(t, fx)
+	repo := openRepo(t, m, false)
+
+	got := []string{}
+	for _, release := range repo.Releases() {
+		got = append(got, release.Name)
+	}
+	want := []string{
+		"release/2.0", "release-B", "release-A", "release-9",
+		"release-8", "release-7", "release-6", "release-5",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Releases() names = %v, want %v", got, want)
 	}
 }
 
