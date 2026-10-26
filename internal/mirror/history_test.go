@@ -33,6 +33,33 @@ func TestContains(t *testing.T) {
 	}
 }
 
+func TestEmptyDefaultBranch(t *testing.T) {
+	fx := newFixture(t)
+	m, rec := newMirror(t, fx)
+	repo, err := m.Open(fixtureRepo, "", []string{"main"}, []string{"release*"}, false)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	rec.calls = nil
+
+	for _, release := range repo.Releases() {
+		if !release.CutAt.IsZero() {
+			t.Errorf("%s CutAt = %v, want zero", release.Name, release.CutAt)
+		}
+	}
+	pick, ok := repo.FindPick(fx.oids["#4"], 4, "release-A")
+	if !ok || pick.Via != 6 {
+		t.Errorf("FindPick = %+v, %v; want the (#6) pick", pick, ok)
+	}
+	for _, call := range rec.calls {
+		for _, arg := range call {
+			if arg == originPrefix {
+				t.Errorf("call passes an empty ref: %v", call)
+			}
+		}
+	}
+}
+
 func TestFindPickByNumberOnly(t *testing.T) {
 	fx := newFixture(t)
 	m, _ := newMirror(t, fx)
@@ -64,6 +91,38 @@ func TestFindPickCherryPicked(t *testing.T) {
 	}
 	if _, ok := repo.FindPick(fx.oids["#4"], 4, "release-B"); ok {
 		t.Error("release-B has no pick of (#4)")
+	}
+}
+
+func TestFindPickOneLogPerRelease(t *testing.T) {
+	fx := newFixture(t)
+	m, rec := newMirror(t, fx)
+	repo := openRepo(t, m, false)
+
+	for _, release := range []string{"release-A", "release-B"} {
+		rec.calls = nil
+		repo.FindPick(fx.oids["#4"], 4, release)
+		if n := rec.count("log"); n != 1 || len(rec.calls) != 1 {
+			t.Errorf("FindPick on %s ran %d log calls of %d: %v", release, n, len(rec.calls), rec.calls)
+		}
+	}
+}
+
+func TestFindPickPrefersCherryPick(t *testing.T) {
+	fx := newFixture(t)
+	fx.git(fx.work, fixtureBase, "checkout", "-q", "release-A")
+	fx.commit(t, "#7", "follow up on (#4) (#7)", 9)
+	fx.git(fx.work, fixtureBase, "push", "-q", fx.remote, "release-A")
+	m, _ := newMirror(t, fx)
+	repo := openRepo(t, m, false)
+
+	pick, ok := repo.FindPick(fx.oids["#4"], 4, "release-A")
+	if !ok || pick.Via != 6 || !pick.At.Equal(fx.dates["pick"]) {
+		t.Errorf("FindPick by oid = %+v, %v; want the (#6) cherry-pick", pick, ok)
+	}
+	pick, ok = repo.FindPick("", 4, "release-A")
+	if !ok || pick.Via != 7 || !pick.At.Equal(fx.dates["#7"]) {
+		t.Errorf("FindPick by number = %+v, %v; want the newest (#7) mention", pick, ok)
 	}
 }
 
@@ -159,6 +218,27 @@ func TestReleasesCapsAtEightAcrossPatterns(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Releases() names = %v, want %v", got, want)
+	}
+}
+
+func TestReleasesComputedOnce(t *testing.T) {
+	fx := newFixture(t)
+	m, rec := newMirror(t, fx)
+	repo := openRepo(t, m, false)
+	rec.calls = nil
+
+	first := repo.Releases()
+	calls := len(rec.calls)
+	if calls == 0 {
+		t.Fatal("first Releases() should run git")
+	}
+	for i := 0; i < 3; i++ {
+		if got := repo.Releases(); !reflect.DeepEqual(got, first) {
+			t.Fatalf("Releases() = %v, want %v", got, first)
+		}
+	}
+	if len(rec.calls) != calls {
+		t.Errorf("repeated Releases() ran git: %v", rec.calls[calls:])
 	}
 }
 

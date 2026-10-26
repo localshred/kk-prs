@@ -9,8 +9,10 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/localshred/kk-prs/internal/board"
 	"github.com/localshred/koolkit/pkg/run"
 )
 
@@ -33,6 +35,9 @@ type Repo struct {
 	// Patterns are the release branch globs, as for MatchPattern.
 	Patterns []string
 	Run      run.Runner
+
+	releases     []board.Release
+	releasesOnce sync.Once
 }
 
 const (

@@ -23,22 +23,42 @@ func (r *Repo) Contains(oid, release string) bool {
 	return r.isAncestor(oid, originPrefix+release)
 }
 
-// FindPick finds the newest commit on release, but not on the default branch,
-// that cherry-picks oid, falling back to one whose message mentions
-// "(#number)". Via is the PR number at the end of that commit's subject when
-// it differs from number.
+// FindPick finds the newest commit on release, but not on the default branch
+// when there is one, that cherry-picks oid, falling back to the newest whose
+// message mentions "(#number)". It runs one git log per call. Via is the PR
+// number at the end of that commit's subject when it differs from number.
 func (r *Repo) FindPick(oid string, number int, release string) (board.Pick, bool) {
-	needles := []string{}
+	cherry := ""
+	args := []string{"log", "--format=%cI%x1f%s%x1f%B%x1e", "-F"}
 	if oid != "" {
-		needles = append(needles, "cherry picked from commit "+oid)
+		cherry = "cherry picked from commit " + oid
+		args = append(args, "--grep="+cherry)
 	}
-	needles = append(needles, "(#"+strconv.Itoa(number)+")")
-	for _, needle := range needles {
-		if pick, ok := r.searchPick(needle, number, release); ok {
-			return pick, true
+	args = append(args, "--grep=(#"+strconv.Itoa(number)+")", originPrefix+release)
+	if r.DefaultBranch != "" {
+		args = append(args, "--not", originPrefix+r.DefaultBranch)
+	}
+	out, err := r.git(args...)
+	if err != nil {
+		return board.Pick{}, false
+	}
+	var fallback []string
+	for _, record := range strings.Split(out, "\x1e") {
+		fields := strings.SplitN(strings.TrimLeft(record, "\n"), "\x1f", 3)
+		if len(fields) != 3 {
+			continue
+		}
+		if cherry != "" && strings.Contains(fields[2], cherry) {
+			return parsePick(fields, number)
+		}
+		if fallback == nil {
+			fallback = fields
 		}
 	}
-	return board.Pick{}, false
+	if fallback == nil {
+		return board.Pick{}, false
+	}
+	return parsePick(fallback, number)
 }
 
 // IntroducedAt reports when oid reached release after the release was cut:
@@ -71,8 +91,47 @@ func (r *Repo) IntroducedAt(oid, release string) (time.Time, bool) {
 // Releases lists the newest mirrored release branches matching Patterns,
 // at most eight across all patterns, newest first by board.VersionLess.
 // CutAt is the committer date of the branch's fork point from the default
-// branch, zero when that is unknown.
+// branch, zero when that is unknown. The list is computed once per Repo.
 func (r *Repo) Releases() []board.Release {
+	r.releasesOnce.Do(func() {
+		r.releases = r.listReleases()
+	})
+	return r.releases
+}
+
+func (r *Repo) commitDate(oid string) (time.Time, bool) {
+	out, err := r.git("log", "-1", "--format=%cI", oid)
+	if err != nil {
+		return time.Time{}, false
+	}
+	at, err := time.Parse(time.RFC3339, strings.TrimSpace(out))
+	return at, err == nil
+}
+
+func (r *Repo) cutAt(release string) time.Time {
+	forkPoint, ok := r.forkPoint(release)
+	if !ok {
+		return time.Time{}
+	}
+	at, _ := r.commitDate(forkPoint)
+	return at
+}
+
+func (r *Repo) forkPoint(release string) (string, bool) {
+	if r.DefaultBranch == "" {
+		return "", false
+	}
+	out, err := r.git("merge-base", originPrefix+release, originPrefix+r.DefaultBranch)
+	oid := strings.TrimSpace(out)
+	return oid, err == nil && oid != ""
+}
+
+func (r *Repo) isAncestor(oid, ref string) bool {
+	_, err := r.git("merge-base", "--is-ancestor", oid, ref)
+	return err == nil
+}
+
+func (r *Repo) listReleases() []board.Release {
 	seen := map[string]bool{}
 	names := []string{}
 	for _, pattern := range r.Patterns {
@@ -101,51 +160,13 @@ func (r *Repo) Releases() []board.Release {
 	return releases
 }
 
-func (r *Repo) commitDate(oid string) (time.Time, bool) {
-	out, err := r.git("log", "-1", "--format=%cI", oid)
-	if err != nil {
-		return time.Time{}, false
-	}
-	at, err := time.Parse(time.RFC3339, strings.TrimSpace(out))
-	return at, err == nil
-}
-
-func (r *Repo) cutAt(release string) time.Time {
-	forkPoint, ok := r.forkPoint(release)
-	if !ok {
-		return time.Time{}
-	}
-	at, _ := r.commitDate(forkPoint)
-	return at
-}
-
-func (r *Repo) forkPoint(release string) (string, bool) {
-	out, err := r.git("merge-base", originPrefix+release, originPrefix+r.DefaultBranch)
-	oid := strings.TrimSpace(out)
-	return oid, err == nil && oid != ""
-}
-
-func (r *Repo) isAncestor(oid, ref string) bool {
-	_, err := r.git("merge-base", "--is-ancestor", oid, ref)
-	return err == nil
-}
-
-func (r *Repo) searchPick(needle string, number int, release string) (board.Pick, bool) {
-	out, err := r.git("log", "--format=%H%x1f%cI%x1f%s", "-F", "--grep="+needle, originPrefix+release, "--not", originPrefix+r.DefaultBranch)
-	if err != nil {
-		return board.Pick{}, false
-	}
-	first, _, _ := strings.Cut(out, "\n")
-	fields := strings.Split(first, "\x1f")
-	if len(fields) != 3 {
-		return board.Pick{}, false
-	}
-	at, err := time.Parse(time.RFC3339, fields[1])
+func parsePick(fields []string, number int) (board.Pick, bool) {
+	at, err := time.Parse(time.RFC3339, fields[0])
 	if err != nil {
 		return board.Pick{}, false
 	}
 	pick := board.Pick{At: at}
-	if m := trailingPRNumber.FindStringSubmatch(fields[2]); m != nil {
+	if m := trailingPRNumber.FindStringSubmatch(fields[1]); m != nil {
 		if via, err := strconv.Atoi(m[1]); err == nil && via != number {
 			pick.Via = via
 		}
