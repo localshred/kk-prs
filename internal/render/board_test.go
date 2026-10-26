@@ -1,6 +1,7 @@
 package render
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -118,6 +119,24 @@ func TestBoardTooNarrow(t *testing.T) {
 	}
 }
 
+func TestBoardAlignsLaneTops(t *testing.T) {
+	cut := releaseLane("release-B", mergedCard("o/svc-a", 3))
+	cut.CutAt = boardNow.Add(-6 * 24 * time.Hour)
+	b := board.Board{Lanes: []board.Lane{
+		{Kind: board.LaneOpen, Name: "OPEN", Cards: []board.Card{openCard("o/svc-a", 1, "one")}},
+		{Kind: board.LanePending, Name: "NOT IN A RELEASE", Cards: []board.Card{mergedCard("o/svc-a", 2)}},
+		cut,
+		releaseLane("release-A", mergedCard("o/svc-a", 4)),
+	}}
+	if got := boxTopRows(t, plainBoard(b, 200, false), 4); !slices.Equal(got, []int{2, 2, 2, 2}) {
+		t.Errorf("box top rows = %v, want all 2", got)
+	}
+	b.Lanes[2].CutAt = time.Time{}
+	if got := boxTopRows(t, plainBoard(b, 200, false), 4); !slices.Equal(got, []int{1, 1, 1, 1}) {
+		t.Errorf("box top rows without cut lines = %v, want all 1", got)
+	}
+}
+
 func TestBoardCardLines(t *testing.T) {
 	c := mergedCard("o/svc-a", 9)
 	c.WorkItemID = "WI-1234"
@@ -170,4 +189,24 @@ func TestBoardEmpty(t *testing.T) {
 	if !strings.Contains(out, "📭 No open or recently merged PRs.") {
 		t.Errorf("got %q", out)
 	}
+}
+
+// boxTopRows returns, for each of lanes columns, the first row whose cell
+// starts a card box.
+func boxTopRows(t *testing.T, out string, lanes int) []int {
+	t.Helper()
+	rows := make([]int, lanes)
+	for i := range rows {
+		rows[i] = -1
+	}
+	for row, line := range strings.Split(out, "\n") {
+		runes := []rune(line)
+		for i := range rows {
+			col := i * (24 + 2)
+			if rows[i] < 0 && col < len(runes) && runes[col] == '┌' {
+				rows[i] = row
+			}
+		}
+	}
+	return rows
 }

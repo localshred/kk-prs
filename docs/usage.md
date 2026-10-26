@@ -96,13 +96,14 @@ touch your own clones.
 🚢 Releases for alice (last 4 weeks)
 
 OPEN (1)                  NOT IN A RELEASE (1)      release-A (1)
-┌──────────────────────┐  ┌──────────────────────┐  cut ~Oct 24 (1d)
-│svc-a#12              │  │svc-a#2               │  ┌──────────────────────┐
-│WI-1234               │  │Tune timeouts         │  │svc-a#1               │
-│Add caching WI-1234   │  │merged 0m             │  │Add retry logic       │
-│opened 1h             │  │on main               │  │merged 0m             │
-│@alice                │  │@alice                │  │@alice                │
-└──────────────────────┘  └──────────────────────┘  └──────────────────────┘
+                                                    cut ~Oct 24 (1d)
+┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
+│svc-a#12              │  │svc-a#2               │  │svc-a#1               │
+│WI-1234               │  │Tune timeouts         │  │Add retry logic       │
+│Add caching WI-1234   │  │merged 0m             │  │merged 0m             │
+│opened 1h             │  │on main               │  │@alice                │
+│@alice                │  │@alice                │  └──────────────────────┘
+└──────────────────────┘  └──────────────────────┘
 ```
 
 The example above comes from `kk prs released --author alice`. Lanes, left

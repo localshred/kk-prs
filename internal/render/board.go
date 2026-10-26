@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,16 +25,19 @@ var glyphColors = map[string]func(string) string{
 // Board renders the release board as side by side swim lanes of boxed cards.
 // Open and pending lanes always render; release lanes are kept in the given
 // order while they fit width, and the rest are summarized on a final line.
+// Lane headers share one height so every lane's first card starts on the
+// same row.
 func Board(b board.Board, width int, showAuthor bool, now time.Time) string {
 	if len(b.Lanes) == 0 {
 		return "📭 No open or recently merged PRs.\n"
 	}
 	shown, folded := fitLanes(b.Lanes, width)
 	short := sharedOwner(b.Lanes)
+	cutRow := slices.ContainsFunc(shown, hasCutLine)
 	columns := make([][]string, len(shown))
 	height := 0
 	for i, l := range shown {
-		columns[i] = laneLines(l, short, showAuthor, now)
+		columns[i] = laneLines(l, cutRow, short, showAuthor, now)
 		if len(columns[i]) > height {
 			height = len(columns[i])
 		}
@@ -136,11 +140,18 @@ func foldSummary(folded []board.Lane) string {
 	return fmt.Sprintf("+%d older %s: %s", len(folded), noun, strings.Join(parts, ", "))
 }
 
-func laneLines(l board.Lane, short bool, showAuthor bool, now time.Time) []string {
+func hasCutLine(l board.Lane) bool {
+	return l.Kind == board.LaneRelease && !l.CutAt.IsZero()
+}
+
+func laneLines(l board.Lane, cutRow bool, short bool, showAuthor bool, now time.Time) []string {
 	lines := []string{fit(fmt.Sprintf("%s (%d)", l.Name, len(l.Cards)), nil, laneWidth)}
-	if l.Kind == board.LaneRelease && !l.CutAt.IsZero() {
+	switch {
+	case hasCutLine(l):
 		cut := fmt.Sprintf("cut ~%s (%s)", l.CutAt.Format("Jan 2"), ui.Humanize(now.Sub(l.CutAt)))
 		lines = append(lines, fit(cut, ui.Dim, laneWidth))
+	case cutRow:
+		lines = append(lines, strings.Repeat(" ", laneWidth))
 	}
 	for _, c := range l.Cards {
 		lines = append(lines, cardLines(c, short, showAuthor, now)...)
