@@ -41,6 +41,19 @@ func (r *recordingRunner) Run(name string, args ...string) (run.Result, error) {
 	return run.Default.Run(name, args...)
 }
 
+func (r *recordingRunner) count(subcommand string) int {
+	n := 0
+	for _, call := range r.calls {
+		for _, arg := range call {
+			if arg == subcommand {
+				n++
+				break
+			}
+		}
+	}
+	return n
+}
+
 func (r *recordingRunner) ran(subcommand string) bool {
 	for _, call := range r.calls {
 		for _, arg := range call {
@@ -111,6 +124,45 @@ func TestOpenPrunesDeletedRelease(t *testing.T) {
 	repo := openRepo(t, m, false)
 
 	want := []string{"origin/main", "origin/release-B"}
+	if got := originRefs(t, repo.Dir); !reflect.DeepEqual(got, want) {
+		t.Fatalf("mirror refs = %v, want %v", got, want)
+	}
+}
+
+func TestOpenRecreatesHalfCreatedMirror(t *testing.T) {
+	fx := newFixture(t)
+	m, _ := newMirror(t, fx)
+	dir := filepath.Join(m.Root, "o", "svc-a.git")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	repo := openRepo(t, m, false)
+
+	if _, err := os.Stat(filepath.Join(dir, "HEAD")); err != nil {
+		t.Fatalf("mirror HEAD missing: %v", err)
+	}
+	want := []string{"origin/main", "origin/release-A", "origin/release-B"}
+	if got := originRefs(t, repo.Dir); !reflect.DeepEqual(got, want) {
+		t.Fatalf("mirror refs = %v, want %v", got, want)
+	}
+}
+
+func TestOpenRepointsCloneURL(t *testing.T) {
+	fx := newFixture(t)
+	m, _ := newMirror(t, fx)
+	goodURL := m.CloneURL
+	m.CloneURL = "file://" + filepath.Join(fx.root, "missing", "{repo}.git")
+	if _, err := m.Open(fixtureRepo, "main", []string{"main"}, []string{"release*"}, false); err == nil {
+		t.Fatal("Open with a bad clone URL should fail")
+	}
+
+	m.CloneURL = goodURL
+	later := fixtureBase.Add(6 * time.Minute)
+	m.Now = func() time.Time { return later }
+	repo := openRepo(t, m, false)
+
+	want := []string{"origin/main", "origin/release-A", "origin/release-B"}
 	if got := originRefs(t, repo.Dir); !reflect.DeepEqual(got, want) {
 		t.Fatalf("mirror refs = %v, want %v", got, want)
 	}
