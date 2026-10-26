@@ -226,11 +226,13 @@ func TestPlaceMergesReposByReleaseName(t *testing.T) {
 	a, b := newHistory("release-B"), newHistory("release-B")
 	a.releases[0].CutAt = t1
 	b.releases[0].CutAt = t2
+	c := newHistory("release-B")
+	c.releases[0].CutAt = t2.Add(time.Hour)
 	a.contains["aaa@release-B"] = true
 	b.contains["bbb@release-B"] = true
 	board := Place(Input{
 		Cache:     LoadCache(filepath.Join(t.TempDir(), "c.json")),
-		Histories: map[string]History{"o/svc-a": a, "o/svc-b": b},
+		Histories: map[string]History{"o/svc-a": a, "o/svc-b": b, "o/svc-c": c},
 		Merged: []gh.BoardPR{
 			mergedPR("o/svc-a", 1, "aaa", "main"),
 			mergedPR("o/svc-b", 2, "bbb", "main"),
@@ -240,7 +242,7 @@ func TestPlaceMergesReposByReleaseName(t *testing.T) {
 		t.Fatalf("lanes = %+v", board.Lanes)
 	}
 	lane := board.Lanes[0]
-	if len(lane.Cards) != 2 || !lane.CutAt.Equal(t2) {
+	if len(lane.Cards) != 2 || !lane.CutAt.Equal(c.releases[0].CutAt) {
 		t.Fatalf("lane = %+v", lane)
 	}
 }

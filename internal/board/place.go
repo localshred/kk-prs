@@ -22,7 +22,6 @@ type Input struct {
 }
 
 type placement struct {
-	cutAt   time.Time
 	release string
 }
 
@@ -32,7 +31,6 @@ type placement struct {
 func Place(in Input) Board {
 	var open, pending []Card
 	releaseCards := map[string][]Card{}
-	cutAts := map[string]time.Time{}
 
 	for _, c := range in.Open {
 		c.WorkItemID, c.WorkItemURL = in.Settings.WorkItemLink(c.PR.Title, c.PR.Body)
@@ -61,9 +59,6 @@ func Place(in Input) Board {
 			continue
 		}
 		releaseCards[p.release] = append(releaseCards[p.release], card)
-		if p.cutAt.After(cutAts[p.release]) {
-			cutAts[p.release] = p.cutAt
-		}
 	}
 
 	var board Board
@@ -80,6 +75,7 @@ func Place(in Input) Board {
 		names = append(names, name)
 	}
 	sort.Slice(names, func(i, j int) bool { return VersionLess(names[j], names[i]) })
+	cutAts := laneCutAts(in.Histories, releaseCards)
 	for _, name := range names {
 		cards := releaseCards[name]
 		sortCards(cards, mergedAt)
@@ -112,6 +108,18 @@ func ancestry(cache *Cache, h History, releases []Release, pr gh.BoardPR) (int, 
 	return 0, false
 }
 
+func laneCutAts(histories map[string]History, lanes map[string][]Card) map[string]time.Time {
+	cutAts := map[string]time.Time{}
+	for _, h := range histories {
+		for _, r := range h.Releases() {
+			if _, shown := lanes[r.Name]; shown && r.CutAt.After(cutAts[r.Name]) {
+				cutAts[r.Name] = r.CutAt
+			}
+		}
+	}
+	return cutAts
+}
+
 func mergedAt(c Card) time.Time {
 	return c.PR.MergedAt
 }
@@ -141,7 +149,7 @@ func placeMerged(cache *Cache, h History, releases []Release, card *Card) (place
 		if pick.Via != 0 {
 			card.Via = fmt.Sprintf("#%d", pick.Via)
 		}
-		return placement{cutAt: releases[i].CutAt, release: releases[i].Name}, true
+		return placement{release: releases[i].Name}, true
 	}
 	if !hasAncestor {
 		return placement{}, false
@@ -150,7 +158,7 @@ func placeMerged(cache *Cache, h History, releases []Release, card *Card) (place
 	if at, ok := h.IntroducedAt(pr.MergeOID, r.Name); ok {
 		card.InReleaseAt = at
 	}
-	return placement{cutAt: r.CutAt, release: r.Name}, true
+	return placement{release: r.Name}, true
 }
 
 func sortCards(cards []Card, when func(Card) time.Time) {
