@@ -6,6 +6,7 @@ require (
 	github.com/gen2brain/beeep v0.0.0-20240516210008-9c006672e7f4
 	github.com/localshred/koolkit v0.1.0
 	github.com/spf13/cobra v1.8.1
+	golang.org/x/sys v0.32.0
 )
 
 require (
@@ -15,5 +16,4 @@ require (
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af // indirect
-	golang.org/x/sys v0.32.0 // indirect
 )

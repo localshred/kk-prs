@@ -35,6 +35,9 @@ ignored):
 If there are no open PRs, kk-prs prints `📭 No open PRs found authored by
 you.` instead of a table.
 
+`kk prs list` is an explicit name for this same default; it takes the same
+`--reviews` and `--verbose` flags.
+
 ## `--reviews` / `-r`: PRs awaiting your review
 
 ```
@@ -77,6 +80,101 @@ age, and one line per check (sorted by status priority, then name):
 Check symbols: `✅` success, `❌` error/failure, `🔄` pending/in-progress,
 `⏳` queued, `⏭️` skipped, `🚫` cancelled, `❓` anything else. A PR with no
 checks prints `ℹ️  No checks found` instead of the checks list.
+
+## `released`: where did my PRs land?
+
+```
+kk prs released [--weeks N] [--author LOGIN]... [--refresh] [--verbose]
+```
+
+Prints a board of swim lanes showing, for your open PRs and the PRs you
+merged recently, the earliest release each one reached. It reads release
+history from kk-owned bare mirrors of each repo (see below), so it does not
+touch your own clones.
+
+```
+🚢 Releases for @me (last 4 weeks)
+
+open (1)                 release-B (1)
+┌──────────────────────┐ ┌──────────────────────┐
+│svc-a#12              │ │svc-a#10              │
+│WI-1234               │ │Add retry logic       │
+│Add caching           │ │merged 2d             │
+│✓ opened 1d           │ │in release 1d         │
+└──────────────────────┘ └──────────────────────┘
+```
+
+Lanes, left to right:
+
+- `open`: your open PRs, oldest first, with a check glyph (`✓` passing,
+  `✗` failing, `↻` running) on the age line.
+- `pending`: merged PRs that have not reached any release, with a reason:
+  `on <branch>` (merged to a trunk, not yet released), `→ <branch> ·
+  waiting` (merged to a non-trunk base), `no releases` (the repo has no
+  release branches), or `release status unknown` (the mirror could not be
+  fetched; a `⚠ <repo>: <error>` warning is printed under the board).
+- One lane per release branch, newest first, headed with its name, card
+  count, and an approximate cut date. A PR is placed in the earliest
+  release containing its merge commit, or a cherry-pick of it. Lanes that
+  do not fit the terminal width are folded into a final `+N older releases`
+  line.
+
+Each card shows the linked `repo#number`, an optional linked work item ID,
+the title, `merged <age> ago` (or `opened <age> ago`), the pending reason,
+`in release <age>` once placed, `↳ via hotfix #N` or `↳ via cherry-pick`
+when the PR arrived on a release branch some other way, and `@author` when
+more than one author is shown or `--author` is not `@me`.
+
+### Flags
+
+- `--weeks N`: how many weeks of merged PRs to include. Default is
+  `kk.prs.weeks`, else 4.
+- `--author LOGIN`: whose PRs to include; repeat for several. Default is
+  `@me`. Duplicates are collapsed by PR URL.
+- `--refresh`: fetch every mirror even if it was fetched within the last
+  five minutes.
+- `--verbose` / `-v`: after the board, print the detailed check block for
+  each open PR, as in `kk prs --verbose`.
+
+The board width comes from `$COLUMNS` when set to a positive integer, else
+the terminal size, else 120 columns.
+
+### Settings
+
+All settings are read from git config (`git config --get-all`), never from
+repo files. Set them with `git config --global`.
+
+- `kk.prs.cloneURL`: remote URL template for mirrors; `{repo}` becomes
+  `owner/name`. Default `git@github.com:{repo}.git`.
+- `kk.prs.weeks`: default for `--weeks`. Default `4`.
+- `kk.prs.ignoreRepo`: `owner/name` of a repo to leave off the board.
+  Repeatable, and each value may hold several whitespace-separated names.
+  Default none.
+- `kk.prs.workItemPattern`: regular expression matching a work item ID,
+  such as `WI-[0-9]+`. The first match in the PR title, else the body, is
+  shown on the card. An invalid expression is ignored. Default unset.
+- `kk.prs.workItemURL`: link target for the work item ID; `{id}` becomes
+  the matched ID, such as `https://tracker.example.com/{id}`. Both this and
+  the pattern must be set for a card to show a work item. Default unset.
+- `kk.trunks`: extra branch names, besides the repo's default branch,
+  `main`, and `master`, treated as trunks. Repeatable. Default none.
+- `kk.releasePattern`: branch globs that identify release branches.
+  Repeatable. `*` does not cross `/`, and a trailing `/**` matches branches
+  nested under a prefix. Default `release*` and `release*/**`.
+- `kk.prs.deployedCommand`: reserved for a future feature and currently
+  ignored.
+
+### Mirrors and cache
+
+Mirrors are bare, commit-only partial clones holding just each repo's
+trunks and release branches, stored at
+`$XDG_CACHE_HOME/koolkit/prs-mirrors/<owner>/<name>.git` (`~/.cache/...`
+when `XDG_CACHE_HOME` is unset). A mirror is fetched at most once every five
+minutes unless you pass `--refresh`, and up to four repos are opened at a
+time. Because a release containing a commit never changes, the release found
+for each merged PR is remembered in
+`$XDG_CACHE_HOME/koolkit/prs/placements.json`. Both locations are safe to
+delete; they are rebuilt on the next run.
 
 ## `watch`: track specific PRs and get notified on change
 

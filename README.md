@@ -40,5 +40,10 @@ localshred/kk-prs#7   3d   ✅   Add watch subcommand
 localshred/kk-prs#5   1w   🔄   Fix render sort order
 ```
 
+`kk prs released` prints a board of swim lanes showing the earliest release
+each of your open and recently merged PRs reached, using local mirrors of
+your repos' release branches. `kk prs list` is an explicit name for the
+default listing above.
+
 See [docs/usage.md](docs/usage.md) for the full command and flag reference,
-including `--reviews`, `--verbose`, and the `watch` subcommand.
+including `--reviews`, `--verbose`, `released`, and the `watch` subcommand.

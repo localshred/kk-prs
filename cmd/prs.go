@@ -15,28 +15,42 @@ import (
 )
 
 func Execute() int {
+	if err := newRootCmd(run.Default).Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "kk-prs:", err)
+		return 1
+	}
+	return 0
+}
+
+func newListFlags(cmd *cobra.Command, r run.Runner) {
 	var reviews, verbose bool
+	cmd.Flags().BoolVarP(&reviews, "reviews", "r", false, "Show PRs requesting your review")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed check status")
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		c := gh.Client{Run: r}
+		if reviews {
+			return runReviews(c, cmd.OutOrStdout())
+		}
+		return runAuthored(c, verbose, cmd.OutOrStdout())
+	}
+}
+
+func newRootCmd(r run.Runner) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "kk-prs",
 		Short:         "Show open PRs with statuses or review requests",
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			c := gh.Client{Run: run.Default}
-			if reviews {
-				return runReviews(c, cmd.OutOrStdout())
-			}
-			return runAuthored(c, verbose, cmd.OutOrStdout())
-		},
 	}
-	root.Flags().BoolVarP(&reviews, "reviews", "r", false, "Show PRs requesting your review")
-	root.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed check status")
-	root.AddCommand(newWatchCmd())
-	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "kk-prs:", err)
-		return 1
+	newListFlags(root, r)
+	list := &cobra.Command{
+		Use:   "list",
+		Short: "List your open PRs (same as running kk prs with no subcommand)",
+		Args:  cobra.NoArgs,
 	}
-	return 0
+	newListFlags(list, r)
+	root.AddCommand(list, newReleasedCmd(r), newWatchCmd())
+	return root
 }
 
 func runAuthored(c gh.Client, verbose bool, out io.Writer) error {
