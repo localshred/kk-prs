@@ -131,6 +131,24 @@ func TestOpenSkipsFreshFetch(t *testing.T) {
 	}
 }
 
+func TestOpenSurvivesReleaseRenamedToDirectory(t *testing.T) {
+	fx := newFixture(t)
+	fx.git(fx.remote, fixtureBase, "update-ref", "refs/heads/release", fx.oids["#1"])
+	m, _ := newMirror(t, fx)
+	openRepo(t, m, false)
+	fx.git(fx.remote, fixtureBase, "update-ref", "-d", "refs/heads/release")
+	fx.git(fx.remote, fixtureBase, "update-ref", "refs/heads/release/1.0", fx.oids["#1"])
+
+	later := fixtureBase.Add(6 * time.Minute)
+	m.Now = func() time.Time { return later }
+	repo := openRepo(t, m, false)
+
+	want := []string{"origin/main", "origin/release-A", "origin/release-B", "origin/release/1.0"}
+	if got := originRefs(t, repo.Dir); !reflect.DeepEqual(got, want) {
+		t.Fatalf("mirror refs = %v, want %v", got, want)
+	}
+}
+
 // gitEnv is a hermetic environment for fixture git commands, with author and
 // committer dates fixed to at.
 func gitEnv(at time.Time) []string {
@@ -261,4 +279,14 @@ func (fx *fixture) git(dir string, at time.Time, args ...string) string {
 		fx.t.Fatalf("git %v: %v\n%s", args, err, stderrOf(err))
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// merge merges branch into the checked-out branch with --no-ff as label,
+// hours after fixtureBase.
+func (fx *fixture) merge(t *testing.T, label, branch string, hours int) {
+	t.Helper()
+	at := fixtureBase.Add(time.Duration(hours) * time.Hour)
+	fx.git(fx.work, at, "merge", "-q", "--no-ff", "-m", "Merge branch '"+branch+"'", branch)
+	fx.dates[label] = at
+	fx.oids[label] = fx.git(fx.work, at, "rev-parse", "HEAD")
 }

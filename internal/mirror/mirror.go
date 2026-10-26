@@ -60,8 +60,8 @@ func MatchPattern(pattern, branch string) bool {
 
 // Open returns the mirror of repo (owner/name), creating it if missing. Unless
 // the last fetch is younger than MaxAge and force is false, it fetches the
-// remote heads named in trunks or matching any of patterns and drops every
-// other mirrored branch.
+// remote heads named in trunks or matching any of patterns, first dropping
+// every other mirrored branch so renamed branches cannot block the fetch.
 func (m Mirror) Open(repo, defaultBranch string, trunks, patterns []string, force bool) (*Repo, error) {
 	r := &Repo{
 		DefaultBranch: defaultBranch,
@@ -118,14 +118,14 @@ func (m Mirror) fetch(r *Repo, trunks, patterns []string) error {
 		wanted[originPrefix+branch] = true
 		refspecs = append(refspecs, "+"+ref+":"+originPrefix+branch)
 	}
+	if err := r.prune(wanted); err != nil {
+		return err
+	}
 	if len(refspecs) > 0 {
 		args := append([]string{"fetch", "--filter=tree:0", "--no-tags", "--quiet", "origin"}, refspecs...)
 		if _, err := r.git(args...); err != nil {
 			return err
 		}
-	}
-	if err := r.prune(wanted); err != nil {
-		return err
 	}
 	stamp := m.Now().Format(time.RFC3339) + "\n"
 	return os.WriteFile(filepath.Join(r.Dir, fetchedAtFile), []byte(stamp), 0o644)
@@ -141,9 +141,13 @@ func (m Mirror) fresh(dir string) bool {
 }
 
 // git runs a git command against the mirror without lazy-fetching missing
-// objects, returning stdout or an error carrying git's stderr.
+// objects, returning stdout or, on any non-zero exit, an error carrying
+// git's stderr.
 func (r *Repo) git(args ...string) (string, error) {
 	res, err := r.Run.Run("git", append([]string{"--no-lazy-fetch", "-C", r.Dir}, args...)...)
+	if err == nil && res.Code != 0 {
+		err = fmt.Errorf("exit status %d", res.Code)
+	}
 	if err != nil {
 		return res.Stdout, fmt.Errorf("git %s: %w: %s", args[0], err, strings.TrimSpace(res.Stderr))
 	}

@@ -84,6 +84,62 @@ func TestIntroducedAt(t *testing.T) {
 	}
 }
 
+func TestIntroducedAtDirectlyOnRelease(t *testing.T) {
+	fx := newFixture(t)
+	fx.git(fx.work, fixtureBase, "checkout", "-q", "-b", "pr-9", "release-B")
+	fx.commit(t, "#9", "add nine (#9)", 9)
+	fx.git(fx.work, fixtureBase, "checkout", "-q", "release-B")
+	fx.merge(t, "merge-9", "pr-9", 10)
+	fx.commit(t, "#10", "direct ten (#10)", 11)
+	fx.git(fx.work, fixtureBase, "checkout", "-q", "-b", "pr-11", "release-B")
+	fx.commit(t, "#11", "add eleven (#11)", 12)
+	fx.git(fx.work, fixtureBase, "checkout", "-q", "release-B")
+	fx.merge(t, "merge-11", "pr-11", 13)
+	fx.git(fx.work, fixtureBase, "push", "-q", fx.remote, "release-B")
+	m, _ := newMirror(t, fx)
+	repo := openRepo(t, m, false)
+
+	tests := []struct {
+		label, want string
+	}{
+		{"#9", "merge-9"},
+		{"merge-9", "merge-9"},
+		{"#10", "#10"},
+		{"#11", "merge-11"},
+	}
+	for _, tt := range tests {
+		at, ok := repo.IntroducedAt(fx.oids[tt.label], "release-B")
+		if !ok || !at.Equal(fx.dates[tt.want]) {
+			t.Errorf("IntroducedAt(%s) = %v, %v; want %v", tt.label, at, ok, fx.dates[tt.want])
+		}
+	}
+}
+
+func TestIntroducedAtMultiPRHotfix(t *testing.T) {
+	fx := newFixture(t)
+	fx.git(fx.work, fixtureBase, "checkout", "-q", "-b", "hotfix-A", "release-A")
+	fx.git(fx.work, fixtureBase, "checkout", "-q", "-b", "pr-7", "hotfix-A")
+	fx.commit(t, "#7", "add seven (#7)", 9)
+	fx.git(fx.work, fixtureBase, "checkout", "-q", "hotfix-A")
+	fx.merge(t, "merge-7", "pr-7", 10)
+	fx.git(fx.work, fixtureBase, "checkout", "-q", "-b", "pr-8", "hotfix-A")
+	fx.commit(t, "#8", "add eight (#8)", 11)
+	fx.git(fx.work, fixtureBase, "checkout", "-q", "hotfix-A")
+	fx.merge(t, "merge-8", "pr-8", 12)
+	fx.git(fx.work, fixtureBase, "checkout", "-q", "release-A")
+	fx.merge(t, "merge-hotfix", "hotfix-A", 13)
+	fx.git(fx.work, fixtureBase, "push", "-q", fx.remote, "release-A")
+	m, _ := newMirror(t, fx)
+	repo := openRepo(t, m, false)
+
+	for _, label := range []string{"#7", "merge-7", "#8", "merge-8"} {
+		at, ok := repo.IntroducedAt(fx.oids[label], "release-A")
+		if !ok || !at.Equal(fx.dates["merge-hotfix"]) {
+			t.Errorf("IntroducedAt(%s) = %v, %v; want %v", label, at, ok, fx.dates["merge-hotfix"])
+		}
+	}
+}
+
 func TestReleasesCapsAtEightAcrossPatterns(t *testing.T) {
 	fx := newFixture(t)
 	for i := 1; i <= 9; i++ {

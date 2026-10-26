@@ -41,26 +41,31 @@ func (r *Repo) FindPick(oid string, number int, release string) (board.Pick, boo
 	return board.Pick{}, false
 }
 
-// IntroducedAt reports when oid reached release through a merge after the
-// release was cut. It is false when oid came in with the cut or no merge on
-// release brought it in.
+// IntroducedAt reports when oid reached release after the release was cut:
+// the committer date of the oldest first-parent commit on release, past the
+// fork point from the default branch, that has oid as an ancestor or is oid.
+// It is false when oid came in with the cut, the fork point is unknown, or
+// no such commit exists.
 func (r *Repo) IntroducedAt(oid, release string) (time.Time, bool) {
 	if oid == "" {
 		return time.Time{}, false
 	}
-	if forkPoint, ok := r.forkPoint(release); ok && r.isAncestor(oid, forkPoint) {
+	forkPoint, ok := r.forkPoint(release)
+	if !ok || r.isAncestor(oid, forkPoint) {
 		return time.Time{}, false
 	}
-	out, err := r.git("log", "--ancestry-path", "--merges", "--reverse", "--format=%cI", oid+".."+originPrefix+release)
+	out, err := r.git("rev-list", "--first-parent", "--reverse", forkPoint+".."+originPrefix+release)
 	if err != nil {
 		return time.Time{}, false
 	}
-	first, _, _ := strings.Cut(out, "\n")
-	at, err := time.Parse(time.RFC3339, strings.TrimSpace(first))
-	if err != nil {
+	commits := strings.Fields(out)
+	first := sort.Search(len(commits), func(i int) bool {
+		return r.isAncestor(oid, commits[i])
+	})
+	if first == len(commits) {
 		return time.Time{}, false
 	}
-	return at, true
+	return r.commitDate(commits[first])
 }
 
 // Releases lists the newest mirrored release branches matching Patterns,
@@ -96,19 +101,21 @@ func (r *Repo) Releases() []board.Release {
 	return releases
 }
 
+func (r *Repo) commitDate(oid string) (time.Time, bool) {
+	out, err := r.git("log", "-1", "--format=%cI", oid)
+	if err != nil {
+		return time.Time{}, false
+	}
+	at, err := time.Parse(time.RFC3339, strings.TrimSpace(out))
+	return at, err == nil
+}
+
 func (r *Repo) cutAt(release string) time.Time {
 	forkPoint, ok := r.forkPoint(release)
 	if !ok {
 		return time.Time{}
 	}
-	out, err := r.git("log", "-1", "--format=%cI", forkPoint)
-	if err != nil {
-		return time.Time{}
-	}
-	at, err := time.Parse(time.RFC3339, strings.TrimSpace(out))
-	if err != nil {
-		return time.Time{}
-	}
+	at, _ := r.commitDate(forkPoint)
 	return at
 }
 
@@ -119,8 +126,8 @@ func (r *Repo) forkPoint(release string) (string, bool) {
 }
 
 func (r *Repo) isAncestor(oid, ref string) bool {
-	res, err := r.Run.Run("git", "--no-lazy-fetch", "-C", r.Dir, "merge-base", "--is-ancestor", oid, ref)
-	return err == nil && res.Code == 0
+	_, err := r.git("merge-base", "--is-ancestor", oid, ref)
+	return err == nil
 }
 
 func (r *Repo) searchPick(needle string, number int, release string) (board.Pick, bool) {
