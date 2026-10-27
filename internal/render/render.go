@@ -12,8 +12,12 @@ import (
 	"github.com/localshred/koolkit/pkg/ui"
 )
 
-// baseWidth caps the base-branch column; longer names are cut in the middle.
-const baseWidth = 24
+const (
+	authorWidth   = 20
+	baseWidth     = 24
+	minTitleWidth = 10
+	tableGap      = 2
+)
 
 var IgnoredCheck = regexp.MustCompile("(?i)snyk")
 
@@ -53,6 +57,29 @@ func CompactRow(pr gh.PR, status string) []string {
 	}
 }
 
+// FitTitles shortens each row's last cell, a green PR title, with a trailing
+// … so the row fits width columns once ui.PrintTable aligns it, leaving one
+// column of slack for wide status emoji. Titles never shrink below
+// minTitleWidth runes.
+func FitTitles(rows [][]string, width int) {
+	widths := map[int]int{}
+	for _, r := range rows {
+		for i := 0; i < len(r)-1; i++ {
+			widths[i] = max(widths[i], ui.VisibleLen(r[i]))
+		}
+	}
+	used := 1
+	for _, w := range widths {
+		used += w + tableGap
+	}
+	room := max(minTitleWidth, width-used)
+	for _, r := range rows {
+		if last := len(r) - 1; last >= 0 {
+			r[last] = ui.Green(truncateEnd(ui.StripANSI(r[last]), room))
+		}
+	}
+}
+
 // OverallStatus returns the overall status emoji for a slice of checks.
 func OverallStatus(checks []gh.Check) string {
 	if len(checks) == 0 {
@@ -88,7 +115,7 @@ func ReviewRow(pr gh.PR) []string {
 	return []string{
 		ui.Hyperlink(pr.URL, ui.Cyan(repoID(pr))),
 		AgeCell(pr.CreatedAt),
-		ui.Yellow("@" + pr.Author.Login),
+		ui.Yellow("@" + truncateMiddle(pr.Author.Login, authorWidth)),
 		BaseCell(pr),
 		ui.Green(pr.Title),
 	}
@@ -126,4 +153,12 @@ func truncateMiddle(s string, width int) string {
 	keep := width - 1
 	head := keep - keep/2
 	return string(r[:head]) + "…" + string(r[len(r)-(keep-head):])
+}
+
+func truncateEnd(s string, width int) string {
+	r := []rune(s)
+	if len(r) <= width {
+		return s
+	}
+	return string(r[:width-1]) + "…"
 }

@@ -80,6 +80,7 @@ func runAuthored(c gh.Client, verbose bool, out io.Writer) error {
 		checks := filterChecks(c.Checks(pr.Repository.NameWithOwner, pr.Number))
 		rows = append(rows, render.CompactRow(pr, render.OverallStatus(checks)))
 	}
+	render.FitTitles(rows, terminalWidth())
 	ui.PrintTable(out, rows)
 	return nil
 }
@@ -104,6 +105,7 @@ func runReviews(c gh.Client, out io.Writer) error {
 	for _, pr := range prs {
 		rows = append(rows, render.ReviewRow(pr))
 	}
+	render.FitTitles(rows, terminalWidth())
 	ui.PrintTable(out, rows)
 	return nil
 }

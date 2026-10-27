@@ -1,6 +1,8 @@
 package render
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/localshred/kk-prs/internal/gh"
@@ -69,5 +71,47 @@ func TestReviewRowShowsBase(t *testing.T) {
 func TestAgeCellBadTimestamp(t *testing.T) {
 	if got := AgeCell("not-a-time"); got != "?" {
 		t.Fatalf("AgeCell(bad) = %q, want ?", got)
+	}
+}
+
+func TestFitTitles(t *testing.T) {
+	long := "Refactor snapshot diffing so watch ticks stop re-reading every PR"
+	rows := [][]string{
+		{"o/r#7", "3d", "→ main", ui.Green(long)},
+		{"o/r#12", "1w", "→ release-B", ui.Green("Short one")},
+	}
+	FitTitles(rows, 40)
+	var out bytes.Buffer
+	ui.PrintTable(&out, rows)
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	for _, l := range lines {
+		if n := ui.VisibleLen(l); n > 40 {
+			t.Errorf("row is %d wide, want <= 40: %q", n, ui.StripANSI(l))
+		}
+	}
+	if got := ui.StripANSI(rows[0][3]); !strings.HasSuffix(got, "…") || !strings.HasPrefix(got, "Refactor") {
+		t.Errorf("long title = %q, want a prefix ending in …", got)
+	}
+	if got := ui.StripANSI(rows[1][3]); got != "Short one" {
+		t.Errorf("short title = %q, want it untouched", got)
+	}
+	if rows[0][3] != ui.Green(ui.StripANSI(rows[0][3])) {
+		t.Errorf("fitted title lost its color: %q", rows[0][3])
+	}
+}
+
+func TestFitTitlesKeepsMinimum(t *testing.T) {
+	rows := [][]string{{"o/a-very-long-repository-name#7", "3d", "→ main", ui.Green("A title that cannot fit")}}
+	FitTitles(rows, 20)
+	if got := []rune(ui.StripANSI(rows[0][3])); len(got) != minTitleWidth {
+		t.Errorf("title = %q (%d runes), want %d", string(got), len(got), minTitleWidth)
+	}
+}
+
+func TestReviewRowTruncatesAuthor(t *testing.T) {
+	pr := gh.PR{Number: 5, Title: "T", URL: "u", CreatedAt: "2026-01-01T00:00:00Z"}
+	pr.Author.Login = "renovate-enterprise-github-prod"
+	if got := ui.StripANSI(ReviewRow(pr)[2]); got != "@renovate-e…thub-prod" {
+		t.Errorf("author = %q, want %q", got, "@renovate-e…thub-prod")
 	}
 }

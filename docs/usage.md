@@ -15,7 +15,9 @@ Fetches the current `gh` user, then lists open PRs authored by that user,
 sorted by creation date. Output is a table with one row per PR: a linked
 `owner/repo#number`, the PR's age, an overall check-status emoji, the base
 branch it merges into (`→ main`, dimmed; names over 24 characters are cut
-in the middle with `…`), and the title.
+in the middle with `…`), and the title. Each row stays on one line: the
+title is cut with a trailing `…` to fit the terminal width (`COLUMNS`, else
+the terminal size, else 120).
 
 ```
 🔍 Fetching open PRs for @bj...
@@ -46,8 +48,9 @@ kk prs --reviews
 ```
 
 Lists open PRs where you're requested as a reviewer, sorted by creation
-date. Each row is a linked `owner/repo#number`, age, the PR author, the
-base branch, and the title:
+date. Each row is a linked `owner/repo#number`, age, the PR author (names
+over 20 characters are cut in the middle), the base branch, and the title,
+fitted to one line the same way:
 
 ```
 👀 Fetching review requests for @bj...

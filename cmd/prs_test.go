@@ -75,3 +75,17 @@ func TestRunReviewsShowsBase(t *testing.T) {
 		t.Errorf("review output missing base: %q", plain)
 	}
 }
+
+func TestRunAuthoredFitsTerminalWidth(t *testing.T) {
+	t.Setenv("COLUMNS", "50")
+	search := `{"data":{"search":{"nodes":[{"number":7,"title":"Refactor snapshot diffing so watch ticks stop re-reading","url":"u",` +
+		`"createdAt":"2026-01-01T00:00:00Z","baseRefName":"main","author":{"login":"alice"},"repository":{"nameWithOwner":"o/r"}}]}}}`
+	var out bytes.Buffer
+	if err := runAuthored(gh.Client{Run: listRunner{search: search}}, false, &out); err != nil {
+		t.Fatal(err)
+	}
+	row := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")[3]
+	if n := ui.VisibleLen(row); n > 50 || !strings.HasSuffix(ui.StripANSI(row), "…") {
+		t.Errorf("row = %q (%d wide), want <= 50 ending in …", ui.StripANSI(row), n)
+	}
+}

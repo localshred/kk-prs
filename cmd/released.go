@@ -39,16 +39,6 @@ var checkGlyphs = map[string]string{
 	"🔄": "↻",
 }
 
-func boardWidth() int {
-	if n, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && n > 0 {
-		return n
-	}
-	if ws, err := unix.IoctlGetWinsize(int(os.Stdout.Fd()), unix.TIOCGWINSZ); err == nil && ws.Col > 0 {
-		return int(ws.Col)
-	}
-	return defaultWidth
-}
-
 func cacheHome() string {
 	if dir := os.Getenv("XDG_CACHE_HOME"); dir != "" {
 		return dir
@@ -211,7 +201,7 @@ func runReleased(r run.Runner, opts releasedOptions, out, progress io.Writer) er
 	}
 
 	fmt.Fprintf(out, "%s\n\n", headerLine(authors, weeks))
-	fmt.Fprint(out, render.Board(b, boardWidth(), showAuthor(authors), now))
+	fmt.Fprint(out, render.Board(b, terminalWidth(), showAuthor(authors), now))
 	for _, w := range b.Warnings {
 		fmt.Fprintln(out, w)
 	}
@@ -233,6 +223,16 @@ func showAuthor(authors []string) bool {
 		}
 	}
 	return false
+}
+
+func terminalWidth() int {
+	if n, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && n > 0 {
+		return n
+	}
+	if ws, err := unix.IoctlGetWinsize(int(os.Stdout.Fd()), unix.TIOCGWINSZ); err == nil && ws.Col > 0 {
+		return int(ws.Col)
+	}
+	return defaultWidth
 }
 
 func toPR(b gh.BoardPR) gh.PR {
