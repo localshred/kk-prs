@@ -12,6 +12,9 @@ import (
 	"github.com/localshred/koolkit/pkg/ui"
 )
 
+// baseWidth caps the base-branch column; longer names are cut in the middle.
+const baseWidth = 24
+
 var IgnoredCheck = regexp.MustCompile("(?i)snyk")
 
 var statusPriority = map[string]int{
@@ -35,7 +38,7 @@ func BaseCell(pr gh.PR) string {
 	if pr.BaseRefName == "" {
 		return ""
 	}
-	return ui.Dim("→ " + pr.BaseRefName)
+	return ui.Dim("→ " + truncateMiddle(pr.BaseRefName, baseWidth))
 }
 
 // CompactRow returns a compact PR row: linked repo#num, age, status, base
@@ -113,4 +116,14 @@ func priority(state string) int {
 
 func repoID(pr gh.PR) string {
 	return fmt.Sprintf("%s#%d", pr.Repository.NameWithOwner, pr.Number)
+}
+
+func truncateMiddle(s string, width int) string {
+	r := []rune(s)
+	if len(r) <= width {
+		return s
+	}
+	keep := width - 1
+	head := keep - keep/2
+	return string(r[:head]) + "…" + string(r[len(r)-(keep-head):])
 }

@@ -14,7 +14,8 @@ kk prs
 Fetches the current `gh` user, then lists open PRs authored by that user,
 sorted by creation date. Output is a table with one row per PR: a linked
 `owner/repo#number`, the PR's age, an overall check-status emoji, the base
-branch it merges into (`→ main`, dimmed), and the title.
+branch it merges into (`→ main`, dimmed; names over 24 characters are cut
+in the middle with `…`), and the title.
 
 ```
 🔍 Fetching open PRs for @bj...

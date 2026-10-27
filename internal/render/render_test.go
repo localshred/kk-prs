@@ -38,6 +38,14 @@ func TestBaseCell(t *testing.T) {
 	if got := BaseCell(gh.PR{}); got != "" {
 		t.Errorf("BaseCell(no base) = %q, want empty", got)
 	}
+	long := gh.PR{BaseRefName: "alice/feature-login-session-refresh-cache-port"}
+	if got := ui.StripANSI(BaseCell(long)); got != "→ alice/featur…-cache-port" {
+		t.Errorf("BaseCell(long) = %q, want %q", got, "→ alice/featur…-cache-port")
+	}
+	exact := gh.PR{BaseRefName: "release/2026.10.1-hotfix"}
+	if got := ui.StripANSI(BaseCell(exact)); got != "→ release/2026.10.1-hotfix" {
+		t.Errorf("BaseCell(24 runes) = %q, want it untouched", got)
+	}
 }
 
 func TestCompactRowShape(t *testing.T) {
