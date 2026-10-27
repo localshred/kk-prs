@@ -30,12 +30,22 @@ func AgeCell(iso string) string {
 	return ui.AgeCell(time.Since(t))
 }
 
-// CompactRow returns a compact PR row: linked repo#num, age, status, title.
+// BaseCell renders the branch a PR merges into, dimmed, or "" when unknown.
+func BaseCell(pr gh.PR) string {
+	if pr.BaseRefName == "" {
+		return ""
+	}
+	return ui.Dim("→ " + pr.BaseRefName)
+}
+
+// CompactRow returns a compact PR row: linked repo#num, age, status, base
+// branch, title.
 func CompactRow(pr gh.PR, status string) []string {
 	return []string{
 		ui.Hyperlink(pr.URL, ui.Cyan(repoID(pr))),
 		AgeCell(pr.CreatedAt),
 		status,
+		BaseCell(pr),
 		ui.Green(pr.Title),
 	}
 }
@@ -69,12 +79,14 @@ func OverallStatus(checks []gh.Check) string {
 	}
 }
 
-// ReviewRow returns a review-request PR row: linked repo#num, age, @author, title.
+// ReviewRow returns a review-request PR row: linked repo#num, age, @author,
+// base branch, title.
 func ReviewRow(pr gh.PR) []string {
 	return []string{
 		ui.Hyperlink(pr.URL, ui.Cyan(repoID(pr))),
 		AgeCell(pr.CreatedAt),
 		ui.Yellow("@" + pr.Author.Login),
+		BaseCell(pr),
 		ui.Green(pr.Title),
 	}
 }

@@ -13,15 +13,15 @@ kk prs
 
 Fetches the current `gh` user, then lists open PRs authored by that user,
 sorted by creation date. Output is a table with one row per PR: a linked
-`owner/repo#number`, the PR's age, an overall check-status emoji, and the
-title.
+`owner/repo#number`, the PR's age, an overall check-status emoji, the base
+branch it merges into (`→ main`, dimmed), and the title.
 
 ```
 🔍 Fetching open PRs for @bj...
 
 📋 Found 2 open PR(s):
-localshred/kk-prs#7   3d   ✅   Add watch subcommand
-localshred/kk-prs#5   1w   🔄   Fix render sort order
+localshred/kk-prs#7   3d   ✅   → main        Add watch subcommand
+localshred/kk-prs#5   1w   🔄   → release-B   Fix render sort order
 ```
 
 The overall status emoji summarizes that PR's checks (Snyk checks are
@@ -45,14 +45,14 @@ kk prs --reviews
 ```
 
 Lists open PRs where you're requested as a reviewer, sorted by creation
-date. Each row is a linked `owner/repo#number`, age, the PR author, and the
-title:
+date. Each row is a linked `owner/repo#number`, age, the PR author, the
+base branch, and the title:
 
 ```
 👀 Fetching review requests for @bj...
 
 📋 Found 1 review request(s):
-localshred/kk-prs#9   2d   @teammate   Refactor snapshot diffing
+localshred/kk-prs#9   2d   @teammate   → main   Refactor snapshot diffing
 ```
 
 If there are none, kk-prs prints `📭 No review requests found.`.
@@ -65,11 +65,13 @@ kk prs --verbose
 
 Only applies to the default (authored) listing, not `--reviews`. Instead of
 a compact table, each PR gets an expanded block with a linked title, repo,
-age, and one line per check (sorted by status priority, then name):
+base branch, age, and one line per check (sorted by status priority, then
+name):
 
 ```
 🔀 PR #7: Add watch subcommand
    📦 localshred/kk-prs
+   🌿 into main
    🕐 opened 3d ago
    📊 Checks:
    ✅ build

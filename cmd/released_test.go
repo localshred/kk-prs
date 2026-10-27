@@ -39,13 +39,7 @@ func (r routeRunner) Run(name string, args ...string) (run.Result, error) {
 }
 
 func TestListMatchesRoot(t *testing.T) {
-	fake := &run.Fake{Results: map[string]run.Result{
-		"gh api user --jq .login": {Stdout: "bj\n"},
-		"gh search prs --author=@me --state=open --json number,title,author,repository,url,createdAt --limit 50": {
-			Stdout: `[{"number":7,"title":"Fix bug","url":"u","createdAt":"2026-01-01T00:00:00Z","repository":{"nameWithOwner":"o/r"}}]`,
-		},
-		"gh pr checks 7 --repo o/r --json name,state,link,workflow": {Stdout: "[]"},
-	}}
+	fake := listRunner{search: listSearchJSON}
 	outputs := map[string]string{}
 	for name, args := range map[string][]string{"root": {}, "list": {"list"}} {
 		var out bytes.Buffer

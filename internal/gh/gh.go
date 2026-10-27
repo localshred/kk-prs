@@ -28,11 +28,12 @@ type BoardPR struct {
 
 // PR represents a GitHub pull request.
 type PR struct {
-	Number     int    `json:"number"`
-	Title      string `json:"title"`
-	URL        string `json:"url"`
-	CreatedAt  string `json:"createdAt"`
-	Author     struct {
+	Number      int    `json:"number"`
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	CreatedAt   string `json:"createdAt"`
+	BaseRefName string `json:"baseRefName"`
+	Author      struct {
 		Login string `json:"login"`
 	} `json:"author"`
 	Repository struct {
@@ -53,17 +54,12 @@ type Client struct {
 	Run run.Runner
 }
 
-const prFields = "number,title,author,repository,url,createdAt"
+const prSearchDocument = "query($q: String!) { search(type: ISSUE, query: $q, first: 50) { " +
+	"nodes { ... on PullRequest { number title url createdAt baseRefName " +
+	"author { login } repository { nameWithOwner } } } } }"
 
-func (c Client) search(filter string) ([]PR, error) {
-	var prs []PR
-	err := run.JSON(c.Run, &prs, "gh", "search", "prs", filter, "--state=open",
-		"--json", prFields, "--limit", "50")
-	return prs, err
-}
-
-// Authored returns PRs authored by the current user.
-func (c Client) Authored() ([]PR, error) { return c.search("--author=@me") }
+// Authored returns the current user's open PRs.
+func (c Client) Authored() ([]PR, error) { return c.search("is:pr is:open author:@me") }
 
 // Checks returns checks for a PR. Returns nil on error.
 func (c Client) Checks(repo string, number int) []Check {
@@ -127,8 +123,10 @@ func (c Client) RecentPRs(author string, since time.Time, withBody bool) ([]Boar
 	return prs, nil
 }
 
-// ReviewRequests returns PRs requesting review from the current user.
-func (c Client) ReviewRequests() ([]PR, error) { return c.search("--review-requested=@me") }
+// ReviewRequests returns open PRs requesting review from the current user.
+func (c Client) ReviewRequests() ([]PR, error) {
+	return c.search("is:pr is:open review-requested:@me")
+}
 
 // Runner returns the underlying runner for the client.
 func (c Client) Runner() run.Runner { return c.Run }
@@ -163,6 +161,17 @@ type boardNode struct {
 			Name string `json:"name"`
 		} `json:"defaultBranchRef"`
 	} `json:"repository"`
+}
+
+type prSearchResponse struct {
+	Data struct {
+		Search struct {
+			Nodes []PR `json:"nodes"`
+		} `json:"search"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
 }
 
 type recentPRsConnection struct {
@@ -219,6 +228,24 @@ func recentPRsDocument(withBody bool) string {
 	return "query($openQuery: String!, $mergedQuery: String!, $openCursor: String, $mergedCursor: String) { " +
 		"open: search(type: ISSUE, query: $openQuery, first: 100, after: $openCursor) { " + selection + " } " +
 		"merged: search(type: ISSUE, query: $mergedQuery, first: 100, after: $mergedCursor) { " + selection + " } }"
+}
+
+func (c Client) search(query string) ([]PR, error) {
+	var resp prSearchResponse
+	if err := run.JSON(c.Run, &resp, "gh", "api", "graphql",
+		"-f", "query="+prSearchDocument, "-f", "q="+query); err != nil {
+		return nil, err
+	}
+	if len(resp.Errors) > 0 {
+		return nil, fmt.Errorf("graphql: %s", resp.Errors[0].Message)
+	}
+	var prs []PR
+	for _, pr := range resp.Data.Search.Nodes {
+		if pr.Number != 0 {
+			prs = append(prs, pr)
+		}
+	}
+	return prs, nil
 }
 
 func (n boardNode) toBoardPR() (BoardPR, error) {

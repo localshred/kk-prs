@@ -122,6 +122,9 @@ func renderVerbose(c gh.Client, pr gh.PR, out io.Writer) {
 	checks := render.SortChecks(filterChecks(c.Checks(pr.Repository.NameWithOwner, pr.Number)))
 	fmt.Fprintf(out, "\n🔀 %s\n", ui.Hyperlink(pr.URL, fmt.Sprintf("PR #%d: %s", pr.Number, pr.Title)))
 	fmt.Fprintf(out, "   📦 %s\n", pr.Repository.NameWithOwner)
+	if pr.BaseRefName != "" {
+		fmt.Fprintf(out, "   🌿 into %s\n", pr.BaseRefName)
+	}
 	fmt.Fprintf(out, "   🕐 opened %s ago\n", render.AgeCell(pr.CreatedAt))
 	if len(checks) == 0 {
 		fmt.Fprintln(out, "   ℹ️  No checks found")

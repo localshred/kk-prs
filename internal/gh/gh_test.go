@@ -2,27 +2,13 @@ package gh
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/localshred/koolkit/pkg/run"
 )
-
-func TestAuthoredParsesJSON(t *testing.T) {
-	f := &run.Fake{Results: map[string]run.Result{
-		"gh search prs --author=@me --state=open --json number,title,author,repository,url,createdAt --limit 50": {
-			Stdout: `[{"number":7,"title":"Fix","url":"u","createdAt":"2026-01-01T00:00:00Z","author":{"login":"bj"},"repository":{"nameWithOwner":"o/r"}}]`,
-		},
-	}}
-	prs, err := Client{Run: f}.Authored()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(prs) != 1 || prs[0].Number != 7 || prs[0].Repository.NameWithOwner != "o/r" {
-		t.Fatalf("authored = %+v", prs)
-	}
-}
 
 func TestChecksSwallowsError(t *testing.T) {
 	f := &run.Fake{Errs: map[string]error{
@@ -203,4 +189,50 @@ func hasArgPrefix(args []string, prefix string) bool {
 		}
 	}
 	return false
+}
+
+const prSearchJSON = `{"data":{"search":{"nodes":[
+	{"number":7,"title":"Fix bug","url":"https://example.com/7","createdAt":"2026-01-01T00:00:00Z",
+	 "baseRefName":"release-B","author":{"login":"alice"},"repository":{"nameWithOwner":"o/svc-a"}},
+	{}
+]}}}`
+
+func TestAuthoredSearchesOpenPRsWithBase(t *testing.T) {
+	stub := &ghStub{results: []run.Result{{Stdout: prSearchJSON}}}
+	prs, err := Client{Run: stub}.Authored()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stub.calls) != 1 || stub.calls[0][1] != "api" || stub.calls[0][2] != "graphql" {
+		t.Fatalf("calls = %v, want one gh api graphql call", stub.calls)
+	}
+	if !slices.Contains(stub.calls[0], "q=is:pr is:open author:@me") {
+		t.Errorf("args %v missing the author search", stub.calls[0])
+	}
+	if len(prs) != 1 {
+		t.Fatalf("prs = %+v, want the one PR node", prs)
+	}
+	pr := prs[0]
+	if pr.Number != 7 || pr.BaseRefName != "release-B" || pr.Repository.NameWithOwner != "o/svc-a" ||
+		pr.Author.Login != "alice" || pr.CreatedAt != "2026-01-01T00:00:00Z" || pr.URL != "https://example.com/7" {
+		t.Errorf("pr = %+v", pr)
+	}
+}
+
+func TestReviewRequestsSearchesReviewRequested(t *testing.T) {
+	stub := &ghStub{results: []run.Result{{Stdout: prSearchJSON}}}
+	if _, err := (Client{Run: stub}).ReviewRequests(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(stub.calls[0], "q=is:pr is:open review-requested:@me") {
+		t.Errorf("args %v missing the review-requested search", stub.calls[0])
+	}
+}
+
+func TestSearchGraphQLError(t *testing.T) {
+	stub := &ghStub{results: []run.Result{{Stdout: `{"errors":[{"message":"rate limited"}]}`}}}
+	prs, err := Client{Run: stub}.Authored()
+	if err == nil || !strings.Contains(err.Error(), "rate limited") || prs != nil {
+		t.Fatalf("Authored() = %v, %v; want the GraphQL error", prs, err)
+	}
 }

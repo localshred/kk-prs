@@ -236,7 +236,13 @@ func showAuthor(authors []string) bool {
 }
 
 func toPR(b gh.BoardPR) gh.PR {
-	pr := gh.PR{Number: b.Number, Title: b.Title, URL: b.URL, CreatedAt: b.CreatedAt.UTC().Format(time.RFC3339)}
+	pr := gh.PR{
+		BaseRefName: b.BaseRef,
+		CreatedAt:   b.CreatedAt.UTC().Format(time.RFC3339),
+		Number:      b.Number,
+		Title:       b.Title,
+		URL:         b.URL,
+	}
 	pr.Repository.NameWithOwner = b.Repo
 	pr.Author.Login = b.Author
 	return pr
